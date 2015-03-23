@@ -1,0 +1,35 @@
+{
+  "name": "JesseHarlin.net",
+  "version": "1.0.0",
+  "description": "A splash page of links",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:the-simian/jesseharlin.net.git"
+  },
+  "keywords": [
+    "Jesse",
+    "Harlin"
+  ],
+  "dependencies": {
+    "body-parser": "^1.11.0",
+    "errorhandler": "^1.3.4",
+    "express": "^4.11.2",
+    "method-override": "^2.3.1"
+  },
+  "devDependencies": {
+    "browserify": "^8.1.3",
+    "gulp": "^3.8.10",
+    "gulp-gh-pages": "^0.4.0",
+    "nodemon": "^1.3.6"
+  },
+  "author": "Jesse HArlin >harlinjesse@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/the-simian/jesseharlin.net/issues"
+  },
+  "homepage": "https://github.com/the-simian/jesseharlin.net"
+}
