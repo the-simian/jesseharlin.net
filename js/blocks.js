@@ -1,4 +1,3 @@
-
 // Constructor
 var container,
   renderer,
@@ -131,13 +130,13 @@ function checkRotation(rotSpeed) {
     y = camera.position.y,
     z = camera.position.z;
 
-//  if (keyboard.pressed("left")) {
-    camera.position.x = x * Math.cos(rotSpeed) + z * Math.sin(rotSpeed);
-    camera.position.z = z * Math.cos(rotSpeed) - x * Math.sin(rotSpeed);
-//  } else if (keyboard.pressed("right")) {
-//    camera.position.x = x * Math.cos(rotSpeed) - z * Math.sin(rotSpeed);
-//    camera.position.z = z * Math.cos(rotSpeed) + x * Math.sin(rotSpeed);
-//  }
+  //  if (keyboard.pressed("left")) {
+  camera.position.x = x * Math.cos(rotSpeed) + z * Math.sin(rotSpeed);
+  camera.position.z = z * Math.cos(rotSpeed) - x * Math.sin(rotSpeed);
+  //  } else if (keyboard.pressed("right")) {
+  //    camera.position.x = x * Math.cos(rotSpeed) - z * Math.sin(rotSpeed);
+  //    camera.position.z = z * Math.cos(rotSpeed) + x * Math.sin(rotSpeed);
+  //  }
 
   camera.lookAt(scene.position);
 
