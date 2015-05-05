@@ -90,6 +90,8 @@ function addCube() {
   // Create the cube geometry
   var hBig = bigness / 1.5;
   var lBig = bigness / 10;
+
+
   var geometry = new THREE.CubeGeometry(randMinMax(lBig, hBig), randMinMax(lBig, hBig), randMinMax(lBig, hBig));
 
   // And put the geometry and material together into a mesh
@@ -123,23 +125,14 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-
 function checkRotation(rotSpeed) {
 
   var x = camera.position.x,
     y = camera.position.y,
     z = camera.position.z;
-
-  //  if (keyboard.pressed("left")) {
   camera.position.x = x * Math.cos(rotSpeed) + z * Math.sin(rotSpeed);
   camera.position.z = z * Math.cos(rotSpeed) - x * Math.sin(rotSpeed);
-  //  } else if (keyboard.pressed("right")) {
-  //    camera.position.x = x * Math.cos(rotSpeed) - z * Math.sin(rotSpeed);
-  //    camera.position.z = z * Math.cos(rotSpeed) + x * Math.sin(rotSpeed);
-  //  }
-
   camera.lookAt(scene.position);
-
 }
 
 
