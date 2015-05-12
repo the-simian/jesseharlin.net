@@ -1,6 +1,8 @@
 # Jesse Harlin
 ## Developer - Creator - Usergroup Leader
 
+### [Jesse Harlin.net](http://jesseharlin.net/)
+
 
 * [My Blog](http://www.simiansblog.com)
 * [My Github](https://github.com/the-simian)
