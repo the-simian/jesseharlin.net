@@ -6,7 +6,9 @@ var ghPages = require('gulp-gh-pages');
 function deploy() {
   return gulp
     .src('./public/**/*')
-    .pipe(ghPages());
+    .pipe(ghPages({
+      force: true
+    }));
 }
 
 gulp.task('deploy', deploy);
