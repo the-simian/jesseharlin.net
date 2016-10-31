@@ -21,7 +21,7 @@
     "method-override": "^2.3.2"
   },
   "devDependencies": {
-    "browserify": "10.x.x",
+    "browserify": "^13.1.1",
     "gulp": "3.x.x",
     "gulp-gh-pages": "0.x.x",
     "nodemon": "1.x.x"
