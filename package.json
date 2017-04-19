@@ -23,7 +23,7 @@
   "devDependencies": {
     "browserify": "^14.1.0",
     "gulp": "3.x.x",
-    "gulp-gh-pages": "0.x.x",
+    "gulp-gh-pages": "^0.5.4",
     "nodemon": "1.x.x"
   },
   "author": "Jesse HArlin >harlinjesse@gmail.com>",
