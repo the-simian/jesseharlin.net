@@ -15,3 +15,4 @@
 * [Techlahoma](http://techlahoma.org/)
 * [OKCjs Usergroup](http://okcjs.com/)
 * [Thunder Plains JavaScript Conference](http://thunderplainsconf.com/)
+* [My Codepen](https://codepen.io/JesseHarlin/)
