@@ -24,7 +24,7 @@
     "browserify": "^16.0.0",
     "gulp": "3.x.x",
     "gulp-gh-pages": "0.x.x",
-    "nodemon": "1.x.x"
+    "nodemon": "^1.19.1"
   },
   "author": "Jesse HArlin >harlinjesse@gmail.com>",
   "license": "ISC",
