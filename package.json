@@ -1,35 +1,30 @@
 {
-  "name": "JesseHarlin.net",
-  "version": "1.0.0",
-  "description": "A splash page of links",
-  "main": "app.js",
+  "name": "jesseharlin.net",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Jesse Harlin's personal site: a tower with the music of the spheres at both ends.",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "check": "biome check . && tsc --noEmit",
+    "fix": "biome check --write ."
   },
-  "repository": {
-    "type": "git",
-    "url": "git@github.com:the-simian/jesseharlin.net.git"
-  },
-  "keywords": [
-    "Jesse",
-    "Harlin"
-  ],
+  "repository": { "type": "git", "url": "git+https://github.com/the-simian/jesseharlin.net.git" },
+  "author": "Jesse Harlin <harlinjesse@gmail.com>",
+  "license": "MIT",
   "dependencies": {
-    "body-parser": "^1.12.4",
-    "errorhandler": "^1.3.5",
-    "express": "^4.12.3",
-    "method-override": "^3.0.0"
+    "@babylonjs/core": "^8.0.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "browserify": "^16.0.0",
-    "gulp": "3.x.x",
-    "gulp-gh-pages": "0.x.x",
-    "nodemon": "1.x.x"
-  },
-  "author": "Jesse HArlin >harlinjesse@gmail.com>",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/the-simian/jesseharlin.net/issues"
-  },
-  "homepage": "https://github.com/the-simian/jesseharlin.net"
+    "@biomejs/biome": "^2.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
+  }
 }
