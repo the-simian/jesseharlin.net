@@ -94,8 +94,8 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     engine.scheduleContacts(contacts, "pool", 1);
     assert(oscillators.length === 4, "Two FM voices must each have two oscillators.");
     assert(suppressed === 1, "The quiet sun excitation must be suppressed.");
-    assert(Math.abs((oscillators[0]?.frequency.value ?? 0) - midiToHz(54)) < 1e-8);
-    assert(Math.abs((oscillators[2]?.frequency.value ?? 0) - midiToHz(49)) < 1e-8);
+    assert(Math.abs((oscillators[0]?.frequency.value ?? 0) - midiToHz(56)) < 1e-8);
+    assert(Math.abs((oscillators[2]?.frequency.value ?? 0) - midiToHz(51)) < 1e-8);
     assert(oscillators.every((oscillator) => oscillator.starts[0] === 10.1));
     assert(filters.every((filter) => filter.value === 1800));
     engine.scheduleContacts(contacts, "pool", 1);

@@ -26,7 +26,7 @@ export function createInitialState(): InstrumentState {
       },
     ],
     selectedBodyIds: [],
-    anchorMidi: 57,
+    anchorMidi: 58,
     baseTurnsPerSecond: 0.25,
     maxVoices: 6,
     soundEnabled: false,

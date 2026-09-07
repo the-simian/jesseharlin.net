@@ -1,0 +1,312 @@
+/* The instrument page. Tokens come from src/styles.css. */
+
+.orrery {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: var(--paper);
+  font-family: var(--mono);
+  --ui-fg: var(--paper);
+  --ui-bg: rgba(15, 14, 20, 0.55);
+  --ui-line: rgba(239, 230, 211, 0.35);
+}
+
+.orrery[data-view="pool"] {
+  color: var(--ink);
+  --ui-fg: var(--ink);
+  --ui-bg: rgba(239, 230, 211, 0.7);
+  --ui-line: rgba(35, 33, 29, 0.4);
+}
+
+.orrery-sky,
+.orrery-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.orrery-name {
+  position: absolute;
+  top: clamp(1rem, 3vw, 2.5rem);
+  left: clamp(1rem, 3vw, 2.5rem);
+  max-width: 28rem;
+  pointer-events: none;
+}
+
+.name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(2rem, 4.5vw, 3.6rem);
+  line-height: 1;
+  margin: 0 0 0.4rem;
+  font-variation-settings:
+    "opsz" 144,
+    "SOFT" 30;
+  letter-spacing: -0.01em;
+}
+
+.name-line {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+
+.name-line em {
+  font-style: normal;
+  border-bottom: 1px solid var(--ui-line);
+}
+
+.orrery-links {
+  position: absolute;
+  top: clamp(1rem, 3vw, 2.5rem);
+  right: clamp(1rem, 3vw, 2.5rem);
+  display: flex;
+  gap: 1.25rem;
+  font-size: 0.8rem;
+}
+
+.link {
+  text-decoration: none;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid transparent;
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.link:hover,
+.link:focus-visible {
+  border-bottom-color: currentColor;
+  outline: none;
+}
+
+.orrery-flip {
+  position: absolute;
+  right: clamp(1rem, 3vw, 2.5rem);
+  bottom: clamp(1rem, 3vw, 2.5rem);
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.orrery-console {
+  position: absolute;
+  left: clamp(1rem, 3vw, 2.5rem);
+  bottom: clamp(1rem, 3vw, 2.5rem);
+  max-width: min(44rem, calc(100vw - 2rem));
+}
+
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.console-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.console-count {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  padding-left: 0.5rem;
+}
+
+.console-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  max-width: 30rem;
+  opacity: 0.8;
+  line-height: 1.5;
+}
+
+.console-editor {
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-line);
+  padding: 0.75rem 1rem;
+  backdrop-filter: blur(6px);
+}
+
+.editor-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+  margin-right: 0.5rem;
+}
+
+/* knobs: the big physical buttons */
+
+.knob {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.4rem 1rem 0.4rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease;
+}
+
+.knob:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.knob:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.knob:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.knob:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.knob-glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: 1px solid var(--ui-line);
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.knob-primary .knob-glyph {
+  background: var(--brass);
+  color: var(--ink);
+  border-color: var(--brass);
+}
+
+.knob-label small {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.knob-sound[aria-pressed="true"] .knob-glyph {
+  background: var(--brass);
+  color: var(--ink);
+  border-color: var(--brass);
+}
+
+/* segmented flip */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+fieldset.segmented {
+  margin: 0;
+  padding: 0;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--ui-line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--ui-bg);
+  backdrop-filter: blur(6px);
+}
+
+.segment {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ui-fg);
+  background: transparent;
+  border: 0;
+  padding: 0 1.1rem;
+  min-height: 3rem;
+  cursor: pointer;
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--ui-fg);
+  color: var(--sky);
+}
+
+.orrery[data-view="pool"] .segment[aria-pressed="true"] {
+  color: var(--paper);
+}
+
+.segment:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: -3px;
+}
+
+/* fields */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.field-label {
+  opacity: 0.75;
+}
+
+.field-input {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ui-fg);
+  background: transparent;
+  border: 1px solid var(--ui-line);
+  border-radius: 0.35rem;
+  padding: 0.45rem 0.6rem;
+  min-height: 2.5rem;
+}
+
+.field-input:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+@media (max-width: 48rem) {
+  .orrery-links {
+    display: none;
+  }
+  .orrery-flip {
+    left: 1rem;
+    right: 1rem;
+    top: auto;
+    justify-content: space-between;
+    position: absolute;
+    bottom: calc(1rem + 9.5rem);
+  }
+  .orrery-console {
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    max-width: none;
+  }
+  .console-hint {
+    font-size: 0.75rem;
+  }
+}

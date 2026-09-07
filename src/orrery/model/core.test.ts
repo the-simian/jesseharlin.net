@@ -56,7 +56,7 @@ test("initial state is a lone silent sun with the required defaults", () => {
   const state = createInitialState();
   assert(validateState(state).ok);
   assert(state.bodies.length === 1 && state.bodies[0]?.parentId === null);
-  assert(state.anchorMidi === 57 && state.baseTurnsPerSecond === 0.25 && state.maxVoices === 6);
+  assert(state.anchorMidi === 58 && state.baseTurnsPerSecond === 0.25 && state.maxVoices === 6);
   assert(!state.soundEnabled && state.activeView === null);
   assert(
     createSimulation(state)
@@ -145,12 +145,12 @@ test("commands are immutable, validate edits, spread siblings, and remove descen
   assert(addBody(full, "sun") === full);
 });
 
-test("pitch includes the sun and every ancestor, mirrored around A3 in the pool", () => {
+test("pitch includes the sun and every ancestor, mirrored around B-flat 3 in the pool", () => {
   let state = addBody(addBody(createInitialState(), "sun"), "body-1");
   state = setOffset(setOffset(setOffset(state, "sun", -4), "body-1", 7), "body-2", 5);
-  close(soundingPitch(state, "sun", "telescope"), 53);
-  close(soundingPitch(state, "body-2", "telescope"), 65);
-  close(soundingPitch(state, "body-2", "pool"), 49);
+  close(soundingPitch(state, "sun", "telescope"), 54);
+  close(soundingPitch(state, "body-2", "telescope"), 66);
+  close(soundingPitch(state, "body-2", "pool"), 50);
   close(midiToHz(69), 440);
   close(midiToHz(57), 220);
 });

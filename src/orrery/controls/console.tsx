@@ -1,0 +1,156 @@
+import type { Body, Drift, Ratio } from "../model/types";
+import { LIMITS } from "../model/types";
+
+const RATIO_LABEL = (ratio: Ratio) =>
+  ratio.denominator === 1 ? `${ratio.numerator}×` : `${ratio.numerator}/${ratio.denominator}×`;
+
+const OFFSET_LABEL: Record<number, string> = {
+  [-12]: "octave down",
+  [-7]: "fifth down",
+  [-5]: "fourth down",
+  [-4]: "major third down",
+  [-3]: "minor third down",
+  [-2]: "step down",
+  0: "same pitch",
+  2: "step up",
+  3: "minor third up",
+  4: "major third up",
+  5: "fourth up",
+  7: "fifth up",
+  12: "octave up",
+};
+
+type ConsoleProps = {
+  selected: Body | null;
+  /** The body a new one would orbit. */
+  addTarget: Body;
+  canAdd: boolean;
+  bodyCount: number;
+  onAdd: () => void;
+  onRemove: () => void;
+  onSpeed: (ratio: Ratio) => void;
+  onPitch: (offset: number) => void;
+  onDrift: (drift: Drift) => void;
+};
+
+/** The instrument's controls, in plain words. Big targets; nothing hidden behind a gesture. */
+export function Console(props: ConsoleProps) {
+  const { selected, addTarget } = props;
+  const targetIsSun = addTarget.parentId === null;
+  const target = targetIsSun
+    ? "the sun"
+    : selected?.id === addTarget.id
+      ? "this one"
+      : "its planet";
+  const addLabel = targetIsSun ? "Add a planet" : "Add a moon";
+  const editor = selected ? <BodyEditor {...props} body={selected} /> : <Hint />;
+  return (
+    <div className="console">
+      <div className="console-row console-actions">
+        <button
+          type="button"
+          className="knob knob-primary"
+          onClick={props.onAdd}
+          disabled={!props.canAdd}
+        >
+          <span className="knob-glyph">+</span>
+          <span className="knob-label">
+            {addLabel} <small>around {target}</small>
+          </span>
+        </button>
+        <button
+          type="button"
+          className="knob"
+          onClick={props.onRemove}
+          disabled={!selected || selected.parentId === null}
+        >
+          <span className="knob-glyph">−</span>
+          <span className="knob-label">Remove</span>
+        </button>
+        <span className="console-count">
+          {props.bodyCount} of {LIMITS.maxBodies} bodies
+        </span>
+      </div>
+      {editor}
+    </div>
+  );
+}
+
+function Hint() {
+  return (
+    <p className="console-hint">
+      Nothing sounds until two bodies touch. Add a planet, then click a body to change its speed or
+      pitch.
+    </p>
+  );
+}
+
+function BodyEditor({ body, onSpeed, onPitch, onDrift }: ConsoleProps & { body: Body }) {
+  const isSun = body.parentId === null;
+  const ratioValue = `${body.speedRatio.numerator}/${body.speedRatio.denominator}`;
+  const driftValue = body.drift.mode;
+  const speed = isSun ? null : (
+    <label className="field">
+      <span className="field-label">Speed</span>
+      <select
+        className="field-input"
+        value={ratioValue}
+        onChange={(event) => {
+          const [n, d] = event.target.value.split("/").map(Number);
+          if (n !== undefined && d !== undefined) onSpeed({ numerator: n, denominator: d });
+        }}
+      >
+        {LIMITS.allowedRatios.map((ratio) => (
+          <option key={RATIO_LABEL(ratio)} value={`${ratio.numerator}/${ratio.denominator}`}>
+            {RATIO_LABEL(ratio)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const drift = isSun ? null : (
+    <label className="field">
+      <span className="field-label">Drift</span>
+      <select
+        className="field-input"
+        value={driftValue}
+        onChange={(event) => onDrift(driftFor(event.target.value))}
+      >
+        <option value="still">still</option>
+        <option value="stair">in steps</option>
+        <option value="sine">in waves</option>
+      </select>
+    </label>
+  );
+  return (
+    <div className="console-row console-editor">
+      <span className="editor-title">{isSun ? "The sun" : "Selected body"}</span>
+      {speed}
+      <label className="field">
+        <span className="field-label">
+          {isSun ? "Pitch of everything" : "Pitch, relative to its parent"}
+        </span>
+        <select
+          className="field-input"
+          value={body.pitchOffsetSemitones}
+          onChange={(event) => onPitch(Number(event.target.value))}
+        >
+          {LIMITS.allowedOffsets.map((offset) => (
+            <option key={offset} value={offset}>
+              {OFFSET_LABEL[offset] ?? `${offset} semitones`}
+            </option>
+          ))}
+        </select>
+      </label>
+      {drift}
+    </div>
+  );
+}
+
+function driftFor(mode: string): Drift {
+  if (mode === "stair")
+    return { mode: "stair", target: "speed", amplitude: 0.35, periodSeconds: 24 };
+  if (mode === "sine")
+    return { mode: "sine", target: "orbitRadius", amplitude: 0.15, periodSeconds: 18 };
+  return { mode: "still" };
+}
