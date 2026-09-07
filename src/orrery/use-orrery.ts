@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   addBody,
   clearSelection,
@@ -7,6 +7,7 @@ import {
   setActiveView,
   setDrift,
   setOffset,
+  setOrbitRadius,
   setRatio,
   setSoundEnabled,
 } from "./model/commands";
@@ -20,11 +21,18 @@ import { createOrreryStore, type OrreryStore, useOrreryState } from "./store";
  */
 export function useOrrery() {
   const [store] = useState<OrreryStore>(() => createOrreryStore());
-  const [runtime] = useState<OrreryRuntime>(() => {
+  const [runtime, setRuntime] = useState<OrreryRuntime | null>(null);
+  // Engine lifecycle: the runtime subscribes to the store, so it is connected and
+  // disconnected here rather than in a state initializer (StrictMode mounts twice).
+  useEffect(() => {
     const created = createOrreryRuntime(store);
     store.dispatch((state) => setActiveView(state, "telescope"));
-    return created;
-  });
+    setRuntime(created);
+    return () => {
+      created.dispose();
+      setRuntime(null);
+    };
+  }, [store]);
   const state = useOrreryState(store);
   const reducedMotion =
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -66,6 +74,9 @@ export function useOrrery() {
     setPitch(offset: number) {
       if (selected) store.dispatch((s) => setOffset(s, selected.id, offset));
     },
+    setRing(orbitRadius: number) {
+      if (selected) store.dispatch((s) => setOrbitRadius(s, selected.id, orbitRadius));
+    },
     setDriftMode(drift: Drift) {
       if (selected) store.dispatch((s) => setDrift(s, selected.id, drift));
     },
@@ -73,6 +84,7 @@ export function useOrrery() {
       store.dispatch((s) => setActiveView(s, view));
     },
     async toggleSound() {
+      if (!runtime) return;
       if (state.soundEnabled) {
         runtime.disableSound();
         store.dispatch((s) => setSoundEnabled(s, false));

@@ -33,6 +33,27 @@ export function createInitialState(): InstrumentState {
     activeView: null,
   };
 }
+/** Speed ratios handed to successive siblings on one ring, so they lap each other and meet. */
+const SIBLING_RATIOS: Ratio[] = [
+  { numerator: 1, denominator: 1 },
+  { numerator: 3, denominator: 2 },
+  { numerator: 1, denominator: 2 },
+  { numerator: 2, denominator: 1 },
+  { numerator: 2, denominator: 3 },
+  { numerator: 3, denominator: 1 },
+  { numerator: 1, denominator: 3 },
+];
+
+/** The innermost ring a child of this parent may use without touching the parent's disc. */
+export function innermostRing(parent: Body, discRadius: number): number {
+  return parent.discRadius + discRadius + 0.2;
+}
+
+/**
+ * Add a child around parentId. New siblings share the first sibling's ring at a
+ * different speed, so bodies meet and the instrument has something to say;
+ * separate rings are a choice the visitor makes with setOrbitRadius.
+ */
 export function addBody(state: InstrumentState, parentId: BodyId): InstrumentState {
   const parent = state.bodies.find((body) => body.id === parentId);
   if (!parent) return state;
@@ -40,19 +61,9 @@ export function addBody(state: InstrumentState, parentId: BodyId): InstrumentSta
   while (state.bodies.some((body) => body.id === `body-${serial}`)) serial++;
   const siblings = state.bodies.filter((body) => body.parentId === parentId);
   const discRadius = parent.discRadius * 0.55;
-  const orbitRadius = Math.max(
-    parent.discRadius + discRadius + 0.2,
-    ...siblings.map(
-      (body) =>
-        body.orbitRadius +
-        body.discRadius +
-        discRadius +
-        0.2 +
-        (body.drift.mode !== "still" && body.drift.target === "orbitRadius"
-          ? body.drift.amplitude
-          : 0),
-    ),
-  );
+  const first = siblings[0];
+  const orbitRadius = first ? first.orbitRadius : innermostRing(parent, discRadius) + 0.6;
+  const ratio = SIBLING_RATIOS[siblings.length % SIBLING_RATIOS.length] ?? SIBLING_RATIOS[0];
   return accept(state, {
     ...state,
     bodies: [
@@ -63,7 +74,7 @@ export function addBody(state: InstrumentState, parentId: BodyId): InstrumentSta
         discRadius,
         orbitRadius,
         phaseRadians: (siblings.length * Math.PI * (3 - Math.sqrt(5))) % (2 * Math.PI),
-        speedRatio: { numerator: 1, denominator: 1 },
+        speedRatio: { ...(ratio as Ratio) },
         pitchOffsetSemitones: 0,
         drift: { mode: "still" },
       },

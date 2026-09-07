@@ -22,6 +22,7 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bun test
       - run: bun run build
       - uses: peaceiris/actions-gh-pages@v4
         with:

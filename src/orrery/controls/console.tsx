@@ -1,5 +1,13 @@
+import { innermostRing } from "../model/commands";
 import type { Body, Drift, Ratio } from "../model/types";
 import { LIMITS } from "../model/types";
+
+/** Three rings per parent: near, middle, far. Bodies on one ring meet; bodies on different rings do not. */
+export function ringsFor(parent: Body, child: Body): number[] {
+  const inner = innermostRing(parent, child.discRadius) + 0.6;
+  return [inner, inner + 1.1, inner + 2.2].map((value) => Math.round(value * 100) / 100);
+}
+const RING_LABEL = ["near", "middle", "far"];
 
 const RATIO_LABEL = (ratio: Ratio) =>
   ratio.denominator === 1 ? `${ratio.numerator}×` : `${ratio.numerator}/${ratio.denominator}×`;
@@ -31,6 +39,9 @@ type ConsoleProps = {
   onSpeed: (ratio: Ratio) => void;
   onPitch: (offset: number) => void;
   onDrift: (drift: Drift) => void;
+  onRing: (orbitRadius: number) => void;
+  /** All bodies, so the editor can find a body's parent. */
+  bodies: Body[];
 };
 
 /** The instrument's controls, in plain words. Big targets; nothing hidden behind a gesture. */
@@ -85,8 +96,38 @@ function Hint() {
   );
 }
 
-function BodyEditor({ body, onSpeed, onPitch, onDrift }: ConsoleProps & { body: Body }) {
+function BodyEditor({
+  body,
+  bodies,
+  onSpeed,
+  onPitch,
+  onDrift,
+  onRing,
+}: ConsoleProps & { body: Body }) {
   const isSun = body.parentId === null;
+  const parent = bodies.find((candidate) => candidate.id === body.parentId);
+  const rings = parent ? ringsFor(parent, body) : [];
+  const ringValue = rings.reduce(
+    (best, ring) =>
+      Math.abs(ring - body.orbitRadius) < Math.abs(best - body.orbitRadius) ? ring : best,
+    rings[0] ?? body.orbitRadius,
+  );
+  const ring = isSun ? null : (
+    <label className="field">
+      <span className="field-label">Ring</span>
+      <select
+        className="field-input"
+        value={ringValue}
+        onChange={(event) => onRing(Number(event.target.value))}
+      >
+        {rings.map((value, index) => (
+          <option key={value} value={value}>
+            {RING_LABEL[index]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   const ratioValue = `${body.speedRatio.numerator}/${body.speedRatio.denominator}`;
   const driftValue = body.drift.mode;
   const speed = isSun ? null : (
@@ -125,6 +166,7 @@ function BodyEditor({ body, onSpeed, onPitch, onDrift }: ConsoleProps & { body: 
   return (
     <div className="console-row console-editor">
       <span className="editor-title">{isSun ? "The sun" : "Selected body"}</span>
+      {ring}
       {speed}
       <label className="field">
         <span className="field-label">

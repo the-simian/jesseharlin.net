@@ -97,7 +97,7 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     assert(Math.abs((oscillators[0]?.frequency.value ?? 0) - midiToHz(56)) < 1e-8);
     assert(Math.abs((oscillators[2]?.frequency.value ?? 0) - midiToHz(51)) < 1e-8);
     assert(oscillators.every((oscillator) => oscillator.starts[0] === 10.1));
-    assert(filters.every((filter) => filter.value === 1800));
+    assert(filters.every((filter) => filter.value > 1200 && filter.value <= 3000));
     engine.scheduleContacts(contacts, "pool", 1);
     assert(
       oscillators.length === 4 && suppressed === 1,

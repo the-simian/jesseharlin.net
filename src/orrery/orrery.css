@@ -88,8 +88,30 @@
   position: absolute;
   right: clamp(1rem, 3vw, 2.5rem);
   bottom: clamp(1rem, 3vw, 2.5rem);
+  max-width: 22rem;
+}
+
+/* the flip: a short note, then the two controls, stacked at the right edge */
+
+.flip {
   display: flex;
-  gap: 0.75rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.flip-note {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  opacity: 0.7;
+  max-width: 20rem;
+  text-align: right;
+}
+
+.flip-controls {
+  display: flex;
+  gap: 0.6rem;
   align-items: stretch;
 }
 
@@ -198,6 +220,10 @@
   border-color: var(--brass);
 }
 
+.knob-label {
+  white-space: nowrap;
+}
+
 .knob-label small {
   display: block;
   font-size: 0.7rem;
@@ -235,6 +261,7 @@ fieldset.segmented {
 }
 
 .segment {
+  white-space: nowrap;
   font: inherit;
   font-size: 0.85rem;
   color: var(--ui-fg);
@@ -289,22 +316,55 @@ fieldset.segmented {
 }
 
 @media (max-width: 48rem) {
+  /* On a phone the page flows: sky, then the flip, then the console. */
+  .orrery {
+    position: static;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--sky);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .orrery[data-view="pool"] {
+    background: var(--paper);
+  }
+  .orrery-sky {
+    position: relative;
+    height: 58vh;
+    flex: none;
+  }
+  .orrery-name {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    max-width: 80vw;
+  }
   .orrery-links {
     display: none;
   }
-  .orrery-flip {
-    left: 1rem;
-    right: 1rem;
-    top: auto;
-    justify-content: space-between;
-    position: absolute;
-    bottom: calc(1rem + 9.5rem);
-  }
+  .orrery-flip,
   .orrery-console {
-    left: 1rem;
-    right: 1rem;
-    bottom: 1rem;
+    position: static;
     max-width: none;
+    padding: 0.75rem 1rem 0;
+  }
+  .orrery-flip {
+    max-width: none;
+  }
+  .flip {
+    align-items: stretch;
+  }
+  .flip-note {
+    text-align: left;
+    max-width: none;
+    order: 2;
+  }
+  .flip-controls {
+    flex-wrap: wrap;
+  }
+  .console-editor {
+    flex-direction: column;
+    align-items: stretch;
   }
   .console-hint {
     font-size: 0.75rem;

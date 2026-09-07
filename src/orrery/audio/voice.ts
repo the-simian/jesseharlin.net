@@ -4,7 +4,7 @@ import type { Contact, InstrumentState, ViewName } from "../model/types";
 import { validateState } from "../model/validate";
 
 const LOOKAHEAD = 0.1;
-const DURATION = 0.65;
+const DURATION = 1.0;
 interface Excitation {
   start: number;
   end: number;
@@ -80,23 +80,30 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     const frequency = midiToHz(midi);
     if (!Number.isFinite(frequency) || frequency <= 0 || frequency >= context.sampleRate / 2)
       return;
+    // A struck bell, restrained: an inharmonic FM partial that brightens with the
+    // strike and dies quickly, over a long, quiet fundamental. Harder strikes are
+    // brighter, not just louder.
     const carrier = context.createOscillator();
     const modulator = context.createOscillator();
     const modulation = context.createGain();
     const envelope = context.createGain();
     const filter = context.createBiquadFilter();
+    const nyquist = context.sampleRate * 0.45;
     carrier.frequency.value = frequency;
-    modulator.frequency.value = Math.min(frequency * 2.01, context.sampleRate * 0.45);
-    modulation.gain.setValueAtTime(frequency * 0.7 * velocity, start);
-    modulation.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+    modulator.frequency.value = Math.min(frequency * 2.7, nyquist);
+    modulation.gain.setValueAtTime(frequency * (0.15 + 1.05 * velocity ** 2), start);
+    modulation.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
     modulator.connect(modulation);
     modulation.connect(carrier.frequency);
     envelope.gain.setValueAtTime(0, start);
-    envelope.gain.linearRampToValueAtTime(0.065 * velocity, start + 0.004);
+    envelope.gain.linearRampToValueAtTime(0.045 * velocity, start + 0.002);
     envelope.gain.exponentialRampToValueAtTime(0.00001, start + DURATION - 0.025);
     envelope.gain.linearRampToValueAtTime(0, start + DURATION);
     filter.type = "lowpass";
-    filter.frequency.value = view === "pool" ? 1800 : Math.min(12000, context.sampleRate * 0.45);
+    filter.frequency.value = Math.min(
+      nyquist,
+      view === "pool" ? 1200 + 1800 * velocity ** 2 : 2500 + 4000 * velocity ** 2,
+    );
     filter.Q.value = 0.5;
     carrier.connect(envelope);
     envelope.connect(filter);

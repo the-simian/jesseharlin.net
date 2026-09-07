@@ -103,7 +103,7 @@ test("validation rejects malformed trees, limits, and geometry", () => {
   assert(validateState({ ...initial, bodies: [sun, child("a", { orbitRadius: 0.45 })] }).ok);
 });
 
-test("commands are immutable, validate edits, spread siblings, and remove descendants", () => {
+test("commands are immutable, validate edits, share rings among siblings, and remove descendants", () => {
   const initial = createInitialState();
   const snapshot = JSON.stringify(initial);
   Object.freeze(initial.bodies[0]);
@@ -115,9 +115,12 @@ test("commands are immutable, validate edits, spread siblings, and remove descen
   const a = second.bodies[1];
   const b = second.bodies[2];
   assert(a && b);
+  // Siblings share a ring at different speeds so they meet; phases are spread.
   assert(
-    b.orbitRadius > a.orbitRadius + a.discRadius + b.discRadius &&
-      b.phaseRadians !== a.phaseRadians,
+    b.orbitRadius === a.orbitRadius &&
+      b.phaseRadians !== a.phaseRadians &&
+      (b.speedRatio.numerator !== a.speedRatio.numerator ||
+        b.speedRatio.denominator !== a.speedRatio.denominator),
   );
   const nested = addBody(second, a.id);
   const moon = nested.bodies[3];

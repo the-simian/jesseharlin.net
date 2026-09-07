@@ -9,31 +9,38 @@ type FlipProps = {
 
 /** Above or below, and whether it makes a sound. */
 export function Flip({ view, soundOn, onView, onSound }: FlipProps) {
+  const note =
+    view === "pool"
+      ? "Below mirrors the arrangement and turns every interval upside down."
+      : "Above is the sky as arranged. Below mirrors it, intervals inverted.";
   return (
     <div className="flip">
-      <fieldset className="segmented">
-        <legend className="visually-hidden">view</legend>
-        <button
-          type="button"
-          className="segment"
-          aria-pressed={view === "telescope"}
-          onClick={() => onView("telescope")}
-        >
-          As above
+      <p className="flip-note">{note}</p>
+      <div className="flip-controls">
+        <fieldset className="segmented">
+          <legend className="visually-hidden">view</legend>
+          <button
+            type="button"
+            className="segment"
+            aria-pressed={view === "telescope"}
+            onClick={() => onView("telescope")}
+          >
+            As above
+          </button>
+          <button
+            type="button"
+            className="segment"
+            aria-pressed={view === "pool"}
+            onClick={() => onView("pool")}
+          >
+            So below
+          </button>
+        </fieldset>
+        <button type="button" className="knob knob-sound" aria-pressed={soundOn} onClick={onSound}>
+          <span className="knob-glyph">{soundOn ? "◉" : "○"}</span>
+          <span className="knob-label">{soundOn ? "Mute sound" : "Enable sound"}</span>
         </button>
-        <button
-          type="button"
-          className="segment"
-          aria-pressed={view === "pool"}
-          onClick={() => onView("pool")}
-        >
-          So below
-        </button>
-      </fieldset>
-      <button type="button" className="knob knob-sound" aria-pressed={soundOn} onClick={onSound}>
-        <span className="knob-glyph">{soundOn ? "◉" : "○"}</span>
-        <span className="knob-label">{soundOn ? "Sound on" : "Sound off"}</span>
-      </button>
+      </div>
     </div>
   );
 }

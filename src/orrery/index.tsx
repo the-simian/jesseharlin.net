@@ -18,12 +18,14 @@ export function OrreryScreen() {
     <OrreryLayout
       view={orrery.state.activeView ?? "telescope"}
       skyZone={
-        <OrreryCanvas
-          store={orrery.store}
-          runtime={orrery.runtime}
-          reducedMotion={orrery.reducedMotion}
-          onPick={orrery.pick}
-        />
+        orrery.runtime ? (
+          <OrreryCanvas
+            store={orrery.store}
+            runtime={orrery.runtime}
+            reducedMotion={orrery.reducedMotion}
+            onPick={orrery.pick}
+          />
+        ) : null
       }
       nameZone={
         <>
@@ -57,6 +59,8 @@ export function OrreryScreen() {
           onSpeed={orrery.setSpeed}
           onPitch={orrery.setPitch}
           onDrift={orrery.setDriftMode}
+          onRing={orrery.setRing}
+          bodies={orrery.state.bodies}
         />
       }
     />
