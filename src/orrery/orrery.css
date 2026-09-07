@@ -340,7 +340,13 @@ fieldset.segmented {
     max-width: 80vw;
   }
   .orrery-links {
-    display: none;
+    position: static;
+    order: 10;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    padding: 1rem 1rem 1.5rem;
+    border-top: 1px solid var(--ui-line);
+    margin-top: 0.5rem;
   }
   .orrery-flip,
   .orrery-console {

@@ -63,6 +63,7 @@ export function OrreryScreen() {
           onDrift={orrery.setDriftMode}
           onRing={orrery.setRing}
           onSelect={orrery.pick}
+          soundOn={orrery.state.soundEnabled}
           bodies={orrery.state.bodies}
         />
       }

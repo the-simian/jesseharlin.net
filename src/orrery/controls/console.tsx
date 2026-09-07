@@ -47,6 +47,7 @@ type ConsoleProps = {
   onDrift: (drift: Drift) => void;
   onRing: (orbitRadius: number) => void;
   onSelect: (id: string | null) => void;
+  soundOn: boolean;
   /** All bodies, so the editor can find a body's parent. */
   bodies: Body[];
 };
@@ -67,7 +68,8 @@ export function Console(props: ConsoleProps) {
   const moonNote = moonTarget
     ? `around ${bodyName(moonTarget, props.bodies)}`
     : "select a planet first";
-  const editor = selected ? <BodyEditor {...props} body={selected} /> : <Hint />;
+  const editor = selected ? <BodyEditor {...props} body={selected} /> : null;
+  const guidance = <Guidance bodies={props.bodies} soundOn={props.soundOn} />;
   return (
     <div className="console">
       <div className="console-row console-actions">
@@ -123,18 +125,27 @@ export function Console(props: ConsoleProps) {
           </select>
         </label>
       </div>
+      {guidance}
       {editor}
     </div>
   );
 }
 
-function Hint() {
-  return (
-    <p className="console-hint">
-      Nothing sounds until two bodies touch. Add a planet, then click a body to change its speed or
-      pitch.
-    </p>
-  );
+/** Says the next thing that makes a sound, and goes quiet once two bodies can meet. */
+function Guidance({ bodies, soundOn }: { bodies: Body[]; soundOn: boolean }) {
+  const rings = new Map<string, number>();
+  for (const body of bodies) {
+    if (body.parentId === null) continue;
+    const key = `${body.parentId}:${body.orbitRadius}`;
+    rings.set(key, (rings.get(key) ?? 0) + 1);
+  }
+  const canCollide = [...rings.values()].some((count) => count >= 2);
+  const text = !canCollide
+    ? "Nothing sounds until two bodies on the same ring touch. Add two planets."
+    : !soundOn
+      ? "Two bodies share a ring. Enable sound to hear them meet."
+      : "Tap or click a body to change its ring, speed, or pitch. Lower the sun and everything follows.";
+  return <p className="console-hint">{text}</p>;
 }
 
 function BodyEditor({
@@ -211,7 +222,8 @@ function BodyEditor({
       {speed}
       <label className="field">
         <span className="field-label">
-          {isSun ? "Pitch of everything" : "Pitch, relative to its parent"}
+          {isSun ? "Pitch of everything" : "Pitch"}
+          <small>{isSun ? " mirrored below" : " vs its parent, mirrored below"}</small>
         </span>
         <select
           className="field-input"

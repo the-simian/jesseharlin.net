@@ -147,9 +147,12 @@ export function createOrreryScene(
   camera.upperBetaLimit = camera.beta;
   let framingRadius = camera.radius;
   let framing = true;
+  let visitorZoomed = false;
   canvas.addEventListener("wheel", () => {
     framing = false;
+    visitorZoomed = true;
   });
+  let lastReach = -1;
 
   const hemi = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
   hemi.intensity = 0.65;
@@ -238,6 +241,7 @@ export function createOrreryScene(
     camera.beta = beta;
     hemi.direction = new Vector3(0, above ? 1 : -1, 0);
     key.direction = new Vector3(-0.6, above ? -1 : 1, 0.4);
+    if (!visitorZoomed) framing = true;
     applyPalette();
   }
 
@@ -280,8 +284,12 @@ export function createOrreryScene(
       visual.orbit?.dispose();
       visuals.delete(id);
     }
-    framingRadius = Math.max(7, reach(state) * 3.1);
-    framing = true;
+    const extent = reach(state);
+    if (extent !== lastReach) {
+      lastReach = extent;
+      framingRadius = Math.max(7, extent * 3.1);
+      if (!visitorZoomed) framing = true;
+    }
   }
 
   function spawnFlash(x: number, z: number, radius: number, born: number) {
@@ -324,6 +332,19 @@ export function createOrreryScene(
     }
   }
 
+  /**
+   * On a landscape canvas the controls overlay the bottom, so the target is
+   * pulled toward the eye and the orrery rides high. Seen from below the
+   * screen direction reverses, so the sign follows the view. On a portrait
+   * canvas the controls sit under the sky and no offset is needed.
+   */
+  function targetOffset(): number {
+    const landscape = engine.getRenderWidth() > engine.getRenderHeight();
+    if (!landscape) return 0;
+    // Seen from below the offset also brings the sun nearer the eye, so it is smaller.
+    return currentView === "telescope" ? -framingRadius * 0.14 : framingRadius * 0.06;
+  }
+
   function applyFrame(frame: RenderFrame, state: InstrumentState) {
     const byId = new Map(state.bodies.map((body) => [body.id, body]));
     const positions = new Map(frame.positions.map((position) => [position.id, position]));
@@ -334,7 +355,11 @@ export function createOrreryScene(
       visual.mesh.position.set(position.x, 0, position.y);
       if (visual.orbit && body.parentId !== null) {
         const parent = positions.get(body.parentId);
-        if (parent) visual.orbit.position.set(parent.x, 0, parent.y);
+        if (parent) {
+          visual.orbit.position.set(parent.x, 0, parent.y);
+          const live = Math.hypot(position.x - parent.x, position.y - parent.y);
+          visual.orbit.scaling.set(live, 1, live);
+        }
       }
     }
     for (const contact of frame.contacts) {
@@ -366,11 +391,18 @@ export function createOrreryScene(
       selectionRing.isVisible = false;
     }
 
-    // Frame the arrangement until the visitor takes the wheel.
+    // Frame the arrangement until the visitor takes the wheel. The controls sit
+    // along the bottom of the screen, so the target is pulled toward the eye and
+    // the orrery rides high in the clear part of the view.
     if (framing) {
       const step = options.reducedMotion ? 1 : 0.05;
       camera.radius += (framingRadius - camera.radius) * step;
-      if (Math.abs(framingRadius - camera.radius) < 0.01) framing = false;
+      const wantedZ = targetOffset();
+      camera.target.z += (wantedZ - camera.target.z) * step;
+      const settled =
+        Math.abs(framingRadius - camera.radius) < 0.01 &&
+        Math.abs(wantedZ - camera.target.z) < 0.01;
+      if (settled) framing = false;
     }
   }
 
@@ -390,6 +422,7 @@ export function createOrreryScene(
   let lastState = store.getState();
   syncBodies(lastState);
   camera.radius = framingRadius;
+  camera.target.z = targetOffset();
   applyPalette();
 
   let lastNow = performance.now();
