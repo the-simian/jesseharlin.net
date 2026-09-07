@@ -4,7 +4,15 @@ import type { Contact, InstrumentState, ViewName } from "../model/types";
 import { validateState } from "../model/validate";
 
 const LOOKAHEAD = 0.1;
-const DURATION = 1.0;
+export function decayFor(midi: number, velocity: number): number {
+  const register = Math.max(46, Math.min(70, midi));
+  const base =
+    register <= 58
+      ? 2.7 * (1.08 / 2.7) ** ((register - 46) / 12)
+      : 1.08 * (0.28 / 1.08) ** ((register - 58) / 12);
+  return base * (1 + 0.25 * Math.max(0, Math.min(1, velocity)));
+}
+
 interface Excitation {
   start: number;
   end: number;
@@ -75,14 +83,14 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     state = next;
     if (reset) cancel();
   }
-  function excite(midi: number, velocity: number, view: ViewName, start: number) {
+  function excite(midi: number, velocity: number, view: ViewName, start: number, duration: number) {
     if (!context || !master) return;
     const frequency = midiToHz(midi);
     if (!Number.isFinite(frequency) || frequency <= 0 || frequency >= context.sampleRate / 2)
       return;
     // A struck bell, restrained: an inharmonic FM partial that brightens with the
-    // strike and dies quickly, over a long, quiet fundamental. Harder strikes are
-    // brighter, not just louder.
+    // strike and dies quickly. Low notes sustain a soft fundamental; high notes
+    // answer with a shorter, brighter partial.
     const carrier = context.createOscillator();
     const modulator = context.createOscillator();
     const modulation = context.createGain();
@@ -91,14 +99,15 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     const nyquist = context.sampleRate * 0.45;
     carrier.frequency.value = frequency;
     modulator.frequency.value = Math.min(frequency * 2.7, nyquist);
-    modulation.gain.setValueAtTime(frequency * (0.15 + 1.05 * velocity ** 2), start);
+    const brightness = 0.65 + 0.45 * Math.max(0, Math.min(1, (midi - 46) / 24));
+    modulation.gain.setValueAtTime(frequency * (0.15 + 1.05 * velocity ** 2) * brightness, start);
     modulation.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
     modulator.connect(modulation);
     modulation.connect(carrier.frequency);
     envelope.gain.setValueAtTime(0, start);
     envelope.gain.linearRampToValueAtTime(0.045 * velocity, start + 0.002);
-    envelope.gain.exponentialRampToValueAtTime(0.00001, start + DURATION - 0.025);
-    envelope.gain.linearRampToValueAtTime(0, start + DURATION);
+    envelope.gain.exponentialRampToValueAtTime(0.00001, start + duration - 0.025);
+    envelope.gain.linearRampToValueAtTime(0, start + duration);
     filter.type = "lowpass";
     filter.frequency.value = Math.min(
       nyquist,
@@ -110,7 +119,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     filter.connect(master);
     const voice: Excitation = {
       start,
-      end: start + DURATION,
+      end: start + duration,
       oscillators: [carrier, modulator],
       nodes: [carrier, modulator, modulation, envelope, filter],
     };
@@ -194,14 +203,15 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
         seen.add(key);
         const start = mapping.audio + note.time - mapping.simulation + LOOKAHEAD;
         if (start < now) continue;
+        const duration = decayFor(note.midi, note.velocity);
         const overlapping = [...voices].filter(
-          (voice) => voice.start < start + DURATION && voice.end > start,
+          (voice) => voice.start < start + duration && voice.end > start,
         ).length;
         if (overlapping >= state.maxVoices) {
           suppressed++;
           continue;
         }
-        excite(note.midi, note.velocity, view, start);
+        excite(note.midi, note.velocity, view, start, duration);
       }
     }
     // Retain only the deduplication window that can still be scheduled.
