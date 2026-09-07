@@ -103,7 +103,12 @@ export function Console(props: ConsoleProps) {
           <span className="knob-label">Remove</span>
         </button>
         <label className="field field-inline">
-          <span className="field-label">Body</span>
+          <span className="field-label">
+            Body{" "}
+            <small>
+              {props.bodyCount} of {LIMITS.maxBodies}
+            </small>
+          </span>
           <select
             className="field-input"
             value={selected?.id ?? ""}
@@ -117,9 +122,6 @@ export function Console(props: ConsoleProps) {
             ))}
           </select>
         </label>
-        <span className="console-count">
-          {props.bodyCount} of {LIMITS.maxBodies}
-        </span>
       </div>
       {editor}
     </div>
