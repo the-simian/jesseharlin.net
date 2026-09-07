@@ -1,23 +1,247 @@
 :root {
-  --paper: #f2e9d8;
-  --ink: #252421;
-  --sky: #141318;
+  --paper: #efe6d3;
+  --paper-deep: #e2d6bd;
+  --ink: #23211d;
+  --ink-soft: #5a554b;
+  --sky: #0f0e14;
   --earth: #a84a32;
-  --brass: #e9b400;
+  --brass: #d9a520;
+  --water: #3f5e73;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: light;
 }
+
 * {
   box-sizing: border-box;
 }
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 html,
 body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: system-ui, sans-serif;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.5;
 }
+
+a {
+  color: inherit;
+}
+
 .plain {
   max-width: 40rem;
   margin: 3rem auto;
   padding: 0 1rem;
+}
+
+/* tower */
+
+.tower {
+  position: relative;
+}
+
+.tower-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.tower-scene canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tower-floors {
+  position: relative;
+  z-index: 1;
+}
+
+.floor {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(1rem, 1fr) minmax(0, 44rem) minmax(1rem, 1fr);
+  align-content: center;
+  padding: 6rem 0;
+}
+
+.floor > * {
+  grid-column: 2;
+}
+
+.floor-header {
+  margin-bottom: 2rem;
+}
+
+.floor-level {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 0.5rem;
+}
+
+.floor-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.05;
+  margin: 0 0 0.75rem;
+  font-variation-settings:
+    "opsz" 144,
+    "SOFT" 40;
+}
+
+.floor-level-0 .floor-name {
+  font-size: clamp(3rem, 9vw, 6.5rem);
+  font-weight: 700;
+}
+
+.floor-caption {
+  font-size: 1.15rem;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 34rem;
+}
+
+/* shelf and books */
+
+.shelf {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 2px solid var(--ink);
+}
+
+.shelf > li {
+  border-bottom: 1px solid var(--ink);
+}
+
+.book {
+  padding: 0;
+}
+
+.book-spine {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0.25rem;
+  font-size: 1.15rem;
+  list-style: none;
+}
+
+.book-spine::-webkit-details-marker {
+  display: none;
+}
+
+.book-spine:hover,
+.book-spine:focus-visible {
+  background: var(--paper-deep);
+  outline: none;
+}
+
+.book-spine:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--brass);
+}
+
+.book-year {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  align-self: center;
+}
+
+.book-spread {
+  padding: 0.25rem 0.25rem 1.5rem;
+  max-width: 38rem;
+}
+
+.book-kind {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--earth);
+  margin: 0 0 0.5rem;
+}
+
+.book-text {
+  margin: 0 0 0.75rem;
+}
+
+.book-link {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  text-decoration: none;
+  border-bottom: 1px solid var(--brass);
+}
+
+/* stairs */
+
+.tower-stairs {
+  position: fixed;
+  right: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.stair {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: rgba(239, 230, 211, 0.85);
+  border: 1px solid var(--ink);
+  padding: 0.5rem 0.75rem;
+  min-height: 2.75rem;
+}
+
+.stair:hover,
+.stair:focus-visible {
+  background: var(--ink);
+  color: var(--paper);
+  outline: none;
+}
+
+.stair-end {
+  visibility: hidden;
+}
+
+.stair-arrow {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 40rem) {
+  .stair-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .tower-stairs {
+    right: 0.75rem;
+  }
 }
