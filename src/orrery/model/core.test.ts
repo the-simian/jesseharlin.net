@@ -90,7 +90,7 @@ test("validation rejects malformed trees, limits, and geometry", () => {
       { orbitRadius: 0.4 },
       { orbitRadius: Number.POSITIVE_INFINITY },
       { phaseRadians: Number.NaN },
-      { pitchOffsetSemitones: 1 },
+      { pitchOffsetSemitones: 6 },
       { speedRatio: { numerator: 7, denominator: 1 } },
       { drift: { mode: "sine", target: "orbitRadius", amplitude: 0.8, periodSeconds: 10 } },
       { drift: { mode: "sine", target: "speed", amplitude: 2, periodSeconds: 10 } },
@@ -133,7 +133,7 @@ test("commands are immutable, validate edits, share rings among siblings, and re
   assert(clearSelection(selected).selectedBodyIds.length === 0);
   assert(selectBody(second, "missing") === second);
   assert(setRatio(second, a.id, { numerator: 7, denominator: 1 }) === second);
-  assert(setOffset(second, a.id, 1) === second);
+  assert(setOffset(second, a.id, 6) === second);
   assert(setOrbitRadius(second, a.id, 0) === second);
   assert(setPhase(second, a.id, Number.NaN) === second);
   assert(setPhase(second, a.id, 1).bodies[1]?.phaseRadians === 1);

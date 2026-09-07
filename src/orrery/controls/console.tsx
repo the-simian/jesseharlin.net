@@ -14,17 +14,21 @@ const RATIO_LABEL = (ratio: Ratio) =>
 
 const OFFSET_LABEL: Record<number, string> = {
   [-12]: "octave down",
+  [-10]: "seventh down",
   [-7]: "fifth down",
   [-5]: "fourth down",
   [-4]: "major third down",
   [-3]: "minor third down",
-  [-2]: "step down",
+  [-2]: "whole step down",
+  [-1]: "half step down",
   0: "same pitch",
-  2: "step up",
+  1: "half step up",
+  2: "whole step up",
   3: "minor third up",
   4: "major third up",
   5: "fourth up",
   7: "fifth up",
+  10: "seventh up",
   12: "octave up",
 };
 

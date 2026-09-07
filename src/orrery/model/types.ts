@@ -69,8 +69,14 @@ export const LIMITS = {
     { numerator: 4, denominator: 1 },
     { numerator: 5, denominator: 1 },
   ] as readonly Ratio[],
-  /** Offsets the visitor may pick, in semitones; seconds, fourths, and fifths favoured. */
-  allowedOffsets: [-12, -7, -5, -4, -3, -2, 0, 2, 3, 4, 5, 7, 12] as readonly number[],
+  /**
+   * Offsets the visitor may pick, in semitones. Fourths and fifths, both thirds,
+   * whole and half steps, the minor seventh, and the octave: the intervals that
+   * measured practice in Jesse's own tracks actually uses.
+   */
+  allowedOffsets: [
+    -12, -10, -7, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 7, 10, 12,
+  ] as readonly number[],
 } as const;
 
 /** A snapshot of where every body is, for rendering. World coordinates in the orrery plane. */
