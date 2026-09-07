@@ -40,9 +40,20 @@ type ConsoleProps = {
   onPitch: (offset: number) => void;
   onDrift: (drift: Drift) => void;
   onRing: (orbitRadius: number) => void;
+  onSelect: (id: string | null) => void;
   /** All bodies, so the editor can find a body's parent. */
   bodies: Body[];
 };
+
+function bodyName(body: Body, bodies: Body[]): string {
+  if (body.parentId === null) return "the sun";
+  const parent = bodies.find((candidate) => candidate.id === body.parentId);
+  const siblings = bodies.filter((candidate) => candidate.parentId === body.parentId);
+  const index = siblings.findIndex((candidate) => candidate.id === body.id) + 1;
+  return parent?.parentId === null
+    ? `planet ${index}`
+    : `moon ${index} of ${bodyName(parent as Body, bodies)}`;
+}
 
 /** The instrument's controls, in plain words. Big targets; nothing hidden behind a gesture. */
 export function Console(props: ConsoleProps) {
@@ -78,8 +89,23 @@ export function Console(props: ConsoleProps) {
           <span className="knob-glyph">−</span>
           <span className="knob-label">Remove</span>
         </button>
+        <label className="field field-inline">
+          <span className="field-label">Body</span>
+          <select
+            className="field-input"
+            value={selected?.id ?? ""}
+            onChange={(event) => props.onSelect(event.target.value || null)}
+          >
+            <option value="">none selected</option>
+            {props.bodies.map((body) => (
+              <option key={body.id} value={body.id}>
+                {bodyName(body, props.bodies)}
+              </option>
+            ))}
+          </select>
+        </label>
         <span className="console-count">
-          {props.bodyCount} of {LIMITS.maxBodies} bodies
+          {props.bodyCount} of {LIMITS.maxBodies}
         </span>
       </div>
       {editor}

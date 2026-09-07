@@ -60,6 +60,7 @@ export function OrreryScreen() {
           onPitch={orrery.setPitch}
           onDrift={orrery.setDriftMode}
           onRing={orrery.setRing}
+          onSelect={orrery.pick}
           bodies={orrery.state.bodies}
         />
       }
