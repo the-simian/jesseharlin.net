@@ -51,10 +51,12 @@ export function OrreryScreen() {
       consoleZone={
         <Console
           selected={orrery.selected}
-          addTarget={orrery.addTarget}
-          canAdd={orrery.canAdd}
+          moonTarget={orrery.moonTarget}
+          canAddPlanet={orrery.canAddPlanet}
+          canAddMoon={orrery.canAddMoon}
           bodyCount={orrery.state.bodies.length}
-          onAdd={orrery.addMoon}
+          onAddPlanet={orrery.addPlanet}
+          onAddMoon={orrery.addMoon}
           onRemove={orrery.removeSelected}
           onSpeed={orrery.setSpeed}
           onPitch={orrery.setPitch}

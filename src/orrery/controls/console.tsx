@@ -30,11 +30,13 @@ const OFFSET_LABEL: Record<number, string> = {
 
 type ConsoleProps = {
   selected: Body | null;
-  /** The body a new one would orbit. */
-  addTarget: Body;
-  canAdd: boolean;
+  /** The planet a new moon would orbit, or null when no planet is selected. */
+  moonTarget: Body | null;
+  canAddPlanet: boolean;
+  canAddMoon: boolean;
   bodyCount: number;
-  onAdd: () => void;
+  onAddPlanet: () => void;
+  onAddMoon: () => void;
   onRemove: () => void;
   onSpeed: (ratio: Ratio) => void;
   onPitch: (offset: number) => void;
@@ -57,14 +59,10 @@ function bodyName(body: Body, bodies: Body[]): string {
 
 /** The instrument's controls, in plain words. Big targets; nothing hidden behind a gesture. */
 export function Console(props: ConsoleProps) {
-  const { selected, addTarget } = props;
-  const targetIsSun = addTarget.parentId === null;
-  const target = targetIsSun
-    ? "the sun"
-    : selected?.id === addTarget.id
-      ? "this one"
-      : "its planet";
-  const addLabel = targetIsSun ? "Add a planet" : "Add a moon";
+  const { selected, moonTarget } = props;
+  const moonNote = moonTarget
+    ? `around ${bodyName(moonTarget, props.bodies)}`
+    : "select a planet first";
   const editor = selected ? <BodyEditor {...props} body={selected} /> : <Hint />;
   return (
     <div className="console">
@@ -72,12 +70,23 @@ export function Console(props: ConsoleProps) {
         <button
           type="button"
           className="knob knob-primary"
-          onClick={props.onAdd}
-          disabled={!props.canAdd}
+          onClick={props.onAddPlanet}
+          disabled={!props.canAddPlanet}
         >
           <span className="knob-glyph">+</span>
           <span className="knob-label">
-            {addLabel} <small>around {target}</small>
+            Add a planet <small>around the sun</small>
+          </span>
+        </button>
+        <button
+          type="button"
+          className="knob"
+          onClick={props.onAddMoon}
+          disabled={!props.canAddMoon}
+        >
+          <span className="knob-glyph">+</span>
+          <span className="knob-label">
+            Add a moon <small>{moonNote}</small>
           </span>
         </button>
         <button

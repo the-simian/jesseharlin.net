@@ -40,9 +40,13 @@ export function useOrrery() {
   const selectedId = state.selectedBodyIds[0] ?? null;
   const selected = state.bodies.find((body) => body.id === selectedId) ?? null;
   const sun = state.bodies.find((body) => body.parentId === null) as Body;
-  // A moon cannot have moons; adding while one is selected adds a sibling around its planet.
-  const addTarget = resolveAddTarget(selected ?? sun, state);
-  const canAdd = state.bodies.length < 8;
+  // Two ways to add: a planet always circles the sun; a moon circles the selected planet
+  // (or, when a moon is selected, that moon's planet, since moons cannot have moons).
+  const moonTarget =
+    selected && selected.parentId !== null ? resolveAddTarget(selected, state) : null;
+  const room = state.bodies.length < 8;
+  const canAddPlanet = room;
+  const canAddMoon = room && moonTarget !== null;
 
   return {
     store,
@@ -51,18 +55,17 @@ export function useOrrery() {
     reducedMotion,
     selected,
     sun,
-    canAdd,
-    addTarget,
+    canAddPlanet,
+    canAddMoon,
+    moonTarget,
     pick(id: string | null) {
       store.dispatch((s) => (id === null ? clearSelection(s) : selectBody(s, id)));
     },
+    addPlanet() {
+      store.dispatch((s) => addAndSelect(s, sun.id));
+    },
     addMoon() {
-      const parent = addTarget;
-      store.dispatch((s) => {
-        const next = addBody(s, parent.id);
-        const created = next.bodies.find((body) => !s.bodies.includes(body));
-        return created ? selectBody(next, created.id) : next;
-      });
+      if (moonTarget) store.dispatch((s) => addAndSelect(s, moonTarget.id));
     },
     removeSelected() {
       if (!selected || selected.parentId === null) return;
@@ -94,6 +97,12 @@ export function useOrrery() {
       store.dispatch((s) => setSoundEnabled(s, true));
     },
   };
+}
+
+function addAndSelect(state: InstrumentState, parentId: string): InstrumentState {
+  const next = addBody(state, parentId);
+  const created = next.bodies.find((body) => !state.bodies.includes(body));
+  return created ? selectBody(next, created.id) : next;
 }
 
 function resolveAddTarget(body: Body, state: InstrumentState): Body {
