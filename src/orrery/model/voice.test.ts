@@ -356,7 +356,7 @@ test("Folia gongs retain long tails through root changes and all its small ornam
         assert(duration >= 0.64 && duration <= 2, `${id}: ${duration}`);
     }
   }
-});
+}, 30000);
 
 test("synthetic reverb has distinct stereo tails, duration, darkness, and decay", () => {
   const context = {

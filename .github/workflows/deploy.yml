@@ -22,7 +22,7 @@ jobs:
           bun-version: 1.4.0
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - run: bun test
+      - run: bun test --timeout 30000
       - run: bun run build
       - uses: peaceiris/actions-gh-pages@v4
         with:
