@@ -1,9 +1,12 @@
-import { pitchOffsetAt, soundingPitch } from "./pitch";
-import { isPresetReplacement } from "./presets";
+import { soundingPitch } from "./pitch";
+import { arrangementChanged } from "./presets";
 import type { Body, BodyPosition, Contact, InstrumentState, SimulationFrame } from "./types";
 import { validateState } from "./validate";
 
 const TAU = 2 * Math.PI;
+// Length-prefix the first id so delimiters inside ids cannot collide.
+const pairKey = (a: string, b: string): string =>
+  a < b ? `${a.length}:${a}${b}` : `${b.length}:${b}${a}`;
 export const FIXED_STEP_SECONDS = 1 / 240;
 // Eight equally spaced amplitude levels. Integrate the actual staircase, not its sine source.
 const stair = (angle: number) => Math.round((Math.sin(angle) + 1) * 3.5) / 3.5 - 1;
@@ -73,41 +76,18 @@ export function createSimulation(initial: InstrumentState) {
   if (!validateState(initial).ok) throw new Error("Invalid initial arrangement.");
   let state = initial;
   let time = 0;
-  let pitchEpoch = 0;
   let remainder = 0;
   let phases = new Map(state.bodies.map((body) => [body.id, body.phaseRadians]));
   let offsets = new Map(state.bodies.map((body) => [body.id, body.pitchOffsetSemitones]));
   let strikes = new Map<string, number>();
-  /** A parent's root as set by the last comet to strike it; overrides its timed drift. */
+  /** A parent's root as set by the last comet to strike it; persists until edited or struck again. */
   let struckRoots = new Map<string, number>();
-  function liveOffsets(at: number): Record<string, number> {
+  function liveOffsets(): Record<string, number> {
     return Object.fromEntries(
-      state.bodies.map((body) => {
-        const base = offsets.get(body.id) ?? body.pitchOffsetSemitones;
-        const drift = body.drift;
-        if (drift.mode === "struck" || drift.mode === "sequence") {
-          const timed =
-            drift.mode === "sequence"
-              ? Math.floor(
-                  (((((at - pitchEpoch) / drift.periodSeconds) % 1) + 1) % 1) * drift.steps.length,
-                )
-              : 0;
-          const set = struckRoots.get(body.id);
-          return [
-            body.id,
-            set !== undefined
-              ? base + set
-              : base +
-                (drift.steps[(timed + (strikes.get(body.id) ?? 0)) % drift.steps.length] ?? 0),
-          ];
-        }
-        const root = struckRoots.get(body.id);
-        if (root !== undefined) return [body.id, base + root];
-        return [
-          body.id,
-          pitchOffsetAt(state, { ...body, pitchOffsetSemitones: base }, at - pitchEpoch),
-        ];
-      }),
+      state.bodies.map((body) => [
+        body.id,
+        (offsets.get(body.id) ?? body.pitchOffsetSemitones) + (struckRoots.get(body.id) ?? 0),
+      ]),
     );
   }
 
@@ -147,7 +127,7 @@ export function createSimulation(initial: InstrumentState) {
   }
   function setState(next: InstrumentState) {
     if (!validateState(next).ok) return;
-    const restart = isPresetReplacement(state, next);
+    const restart = arrangementChanged(state, next);
     const oldBodies = new Map(state.bodies.map((body) => [body.id, body]));
     const nextPhases = new Map<string, number>();
     for (const body of next.bodies) {
@@ -182,18 +162,27 @@ export function createSimulation(initial: InstrumentState) {
     if (restart) struckRoots = new Map();
     else
       struckRoots = new Map(
-        [...struckRoots].filter(([id]) => next.bodies.some((body) => body.id === id)),
+        [...struckRoots].filter(([id]) => {
+          const old = oldBodies.get(id);
+          const body = next.bodies.find((candidate) => candidate.id === id);
+          return (
+            old &&
+            body &&
+            old.pitchOffsetSemitones === body.pitchOffsetSemitones &&
+            (old.pitchRevision ?? 0) === (body.pitchRevision ?? 0) &&
+            JSON.stringify(old.drift) === JSON.stringify(body.drift)
+          );
+        }),
       );
     state = next;
     phases = nextPhases;
-    const ids = new Set(next.bodies.map((body) => body.id));
+    const pairs = new Set<string>();
+    for (const [i, a] of next.bodies.entries())
+      for (const b of next.bodies.slice(i + 1)) pairs.add(pairKey(a.id, b.id));
     if (restart) {
       touching.clear();
-      pitchEpoch = time;
     }
-    touching = new Set(
-      [...touching].filter((key) => (JSON.parse(key) as string[]).every((id) => ids.has(id))),
-    );
+    touching = new Set([...touching].filter((key) => pairs.has(key)));
   }
   function substepLimit(): number {
     // Sum local speed bounds to conservatively include all ancestor motion.
@@ -216,7 +205,7 @@ export function createSimulation(initial: InstrumentState) {
     return Math.min(FIXED_STEP_SECONDS, speed > 0 ? radius / (2 * speed) : FIXED_STEP_SECONDS);
   }
   function detect(start: BodyPosition[], end: BodyPosition[], at: number, dt: number): Contact[] {
-    const contacts: Contact[] = [];
+    const entries: Omit<Contact, "pitchA" | "pitchB">[] = [];
     for (let i = 0; i < state.bodies.length; i++) {
       for (let j = i + 1; j < state.bodies.length; j++) {
         const a = state.bodies[i];
@@ -239,7 +228,7 @@ export function createSimulation(initial: InstrumentState) {
           a.eccentricity === b.eccentricity;
         if (parentPair ? !parentStrike : !sameRing && !a.strikesParent && !b.strikesParent)
           continue;
-        const key = JSON.stringify([a.id, b.id].sort());
+        const key = pairKey(a.id, b.id);
         const x = a0.x - b0.x;
         const y = a0.y - b0.y;
         const dx = a1.x - b1.x - x;
@@ -257,12 +246,10 @@ export function createSimulation(initial: InstrumentState) {
           const nx = x + dx * entry;
           const ny = y + dy * entry;
           const closing = Math.max(0, -(nx * dx + ny * dy) / (Math.hypot(nx, ny) || radius) / dt);
-          contacts.push({
+          entries.push({
             time: at + entry * dt,
             a: a.id,
             b: b.id,
-            pitchA: 0,
-            pitchB: 0,
             intensity: parentStrike ? 1 : Math.min(1, closing / 4),
             closing,
             shade: shadeAt(state, positionsAt(at + entry * dt), a.id, b.id),
@@ -284,8 +271,9 @@ export function createSimulation(initial: InstrumentState) {
         else touching.delete(key);
       }
     }
-    contacts.sort((a, b) => a.time - b.time || a.a.localeCompare(b.a) || a.b.localeCompare(b.b));
-    for (const contact of contacts) {
+    entries.sort((a, b) => a.time - b.time || a.a.localeCompare(b.a) || a.b.localeCompare(b.b));
+    const contacts: Contact[] = [];
+    for (const contact of entries) {
       const a = state.bodies.find((body) => body.id === contact.a);
       const b = state.bodies.find((body) => body.id === contact.b);
       if (!a || !b) continue;
@@ -302,11 +290,11 @@ export function createSimulation(initial: InstrumentState) {
         const index = strikes.get(striker.id) ?? 0;
         struckRoots.set(parent.id, striker.strikeSteps[index % striker.strikeSteps.length] ?? 0);
         strikes.set(striker.id, index + 1);
-      } else if (parent && (parent.drift.mode === "struck" || parent.drift.mode === "sequence"))
-        strikes.set(parent.id, (strikes.get(parent.id) ?? 0) + 1);
-      const live = liveOffsets(contact.time);
-      contact.pitchA = soundingPitch(state, a.id, "telescope", contact.time - pitchEpoch, live);
-      contact.pitchB = soundingPitch(state, b.id, "telescope", contact.time - pitchEpoch, live);
+      }
+      const live = liveOffsets();
+      const pitchA = soundingPitch(state, a.id, "telescope", contact.time, live);
+      const pitchB = soundingPitch(state, b.id, "telescope", contact.time, live);
+      contacts.push({ ...contact, pitchA, pitchB });
       if (a.exchangesPitch && b.exchangesPitch) {
         const first = offsets.get(a.id) ?? a.pitchOffsetSemitones;
         offsets.set(a.id, offsets.get(b.id) ?? b.pitchOffsetSemitones);
@@ -334,7 +322,7 @@ export function createSimulation(initial: InstrumentState) {
         time = nextTime;
         positions = next;
       }
-      frames.push({ time, positions, contacts, pitchOffsets: liveOffsets(time) });
+      frames.push({ time, positions, contacts, pitchOffsets: liveOffsets() });
       remainder = Math.max(0, remainder - FIXED_STEP_SECONDS);
     }
     return frames;

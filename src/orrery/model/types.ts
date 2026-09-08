@@ -17,28 +17,8 @@ export type Ratio = { numerator: number; denominator: number };
 export type Drift =
   | { mode: "still" }
   | {
-      mode: "struck";
-      target: "pitch";
-      /** Semitone displacements added to the local offset; start at steps[0], advance on parent strikes. */
-      steps: number[];
-    }
-  | {
-      mode: "sequence";
-      target: "pitch";
-      /** Equal-duration semitone displacements added to the local offset; may leave the scale. */
-      steps: number[];
-      periodSeconds: number;
-    }
-  | {
       mode: "stair" | "sine";
       target: "orbitRadius" | "speed";
-      amplitude: number;
-      periodSeconds: number;
-    }
-  | {
-      mode: "stair";
-      target: "pitch";
-      /** Maximum upward displacement in scale steps; cycle walks up, then down. */
       amplitude: number;
       periodSeconds: number;
     };
@@ -60,6 +40,8 @@ export interface Body {
   speedRatio: Ratio;
   /** Offset relative to the parent, in semitones. */
   pitchOffsetSemitones: number;
+  /** Explicit pitch or drift edits clear any live comet root, even for the same value. */
+  pitchRevision?: number;
   /** Exchange local authored offsets when both contacting bodies opt in. */
   exchangesPitch: boolean;
   /**
@@ -76,6 +58,8 @@ export interface Body {
 export type ViewName = "telescope" | "pool";
 
 export interface InstrumentState {
+  /** Revision of whole-arrangement replacements; ordinary body edits preserve it. */
+  arrangement: number;
   bodies: Body[];
   selectedBodyIds: BodyId[];
   /** Full turns per second for a body with speedRatio 1/1. */
@@ -145,6 +129,6 @@ export interface SimulationFrame {
   time: number;
   positions: BodyPosition[];
   contacts: Contact[];
-  /** Live local offsets, including drift; pass directly to soundingPitch. */
+  /** Live local offsets, including exchanges and comet roots; pass directly to soundingPitch. */
   pitchOffsets: Record<BodyId, number>;
 }

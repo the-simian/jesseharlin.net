@@ -1,7 +1,6 @@
 import { createVoiceEngine } from "./audio/voice";
-import { pitchOffsetAt } from "./model/pitch";
 import { createSimulation } from "./model/simulation";
-import type { BodyPosition, Contact, InstrumentState } from "./model/types";
+import type { BodyPosition, Contact } from "./model/types";
 import type { OrreryStore } from "./store";
 
 /** Audio is scheduled this far ahead, so the picture runs this far behind. */
@@ -13,7 +12,7 @@ export type RenderFrame = {
   positions: BodyPosition[];
   /** Contacts whose time has just passed in the delayed timeline. */
   contacts: Contact[];
-  /** Local offsets at the same delayed time as positions, including exchange and drift. */
+  /** Local offsets at the same delayed time as positions, including exchanges and comet roots. */
   pitchOffsets: Record<string, number>;
 };
 
@@ -30,12 +29,7 @@ type Snapshot = { time: number; positions: BodyPosition[]; pitchOffsets: Record<
  */
 export function createOrreryRuntime(store: OrreryStore) {
   const simulation = createSimulation(store.getState());
-  let suppressedTotal = 0;
-  const voice = createVoiceEngine({
-    onSuppressed: (count) => {
-      suppressedTotal += count;
-    },
-  });
+  const voice = createVoiceEngine();
   let simulationTime = 0;
   let pendingContacts: Contact[] = [];
   let snapshots: Snapshot[] = [
@@ -43,7 +37,7 @@ export function createOrreryRuntime(store: OrreryStore) {
       time: 0,
       positions: simulation.positionsAt(0),
       pitchOffsets: Object.fromEntries(
-        store.getState().bodies.map((body) => [body.id, pitchOffsetAt(store.getState(), body, 0)]),
+        store.getState().bodies.map((body) => [body.id, body.pitchOffsetSemitones]),
       ),
     },
   ];
@@ -106,12 +100,8 @@ export function createOrreryRuntime(store: OrreryStore) {
     disableSound: () => voice.disable(),
     dispose() {
       unsubscribe();
-      voice.disable();
+      voice.dispose?.();
     },
-    get suppressedTotal() {
-      return suppressedTotal;
-    },
-    stateNow: (): InstrumentState => store.getState(),
   };
 }
 

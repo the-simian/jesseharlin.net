@@ -13,6 +13,7 @@ import {
   setSoundEnabled,
 } from "./model/commands";
 import { getPresetId, PRESETS } from "./model/presets";
+import { depthOf } from "./model/tree";
 import {
   type Body,
   type Drift,
@@ -119,17 +120,8 @@ function addAndSelect(state: InstrumentState, parentId: string): InstrumentState
 }
 
 function resolveAddTarget(body: Body, state: InstrumentState): Body {
-  if (depthOf(body, state) < LIMITS.maxDepth) return body;
-  const parent = state.bodies.find((candidate) => candidate.id === body.parentId);
+  const byId = new Map(state.bodies.map((candidate) => [candidate.id, candidate]));
+  if (depthOf(body, byId) < LIMITS.maxDepth) return body;
+  const parent = body.parentId === null ? undefined : byId.get(body.parentId);
   return parent ?? body;
-}
-
-export function depthOf(body: Body, state: InstrumentState): number {
-  let depth = 0;
-  let parent = body.parentId;
-  while (parent !== null) {
-    depth++;
-    parent = state.bodies.find((candidate) => candidate.id === parent)?.parentId ?? null;
-  }
-  return depth;
 }

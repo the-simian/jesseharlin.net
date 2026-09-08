@@ -4,15 +4,16 @@
  */
 import { sharedMix } from "../mix";
 import { createInitialState } from "../model/commands";
+import { decayCurve } from "../model/decay";
 import { midiToHz, soundingPitch } from "../model/pitch";
-import { isPresetReplacement } from "../model/presets";
 import type { Contact, InstrumentState, ViewName } from "../model/types";
 import { validateState } from "../model/validate";
 
 const LOOKAHEAD = 0.1;
 /**
- * With only (midi, velocity) this keeps the original B-flat register envelope; the
- * engine also passes weight, closing speed, and the anchor.
+ * The decay curve scaled by the mix's ring. With only (midi, velocity) this is
+ * the bare register envelope; the engine also passes weight, closing speed, and
+ * the anchor.
  */
 export function decayFor(
   midi: number,
@@ -21,26 +22,7 @@ export function decayFor(
   closing = 0,
   anchorMidi = 58,
 ): number {
-  const register = Math.max(46, Math.min(70, midi - anchorMidi + 58));
-  const base =
-    register <= 58
-      ? 5 * (2.2 / 5) ** ((register - 46) / 12)
-      : 2.2 * (0.5 / 2.2) ** ((register - 58) / 12);
-  const registerDecay = base * (1 + 0.25 * Math.max(0, Math.min(1, velocity)));
-  // The mix's ring control scales every decay; its default is already 1.5.
-  const ring = 1.6 * sharedMix.getMix().decay;
-  if (weight === undefined) return registerDecay * ring;
-  return (
-    ring *
-    Math.max(
-      0.4,
-      Math.min(
-        10,
-        (registerDecay + 5 * Math.max(0, Math.min(1, weight)) ** 3) /
-          (1 + 0.08 * Math.max(0, closing)),
-      ),
-    )
-  );
+  return decayCurve(midi, velocity, weight, closing, anchorMidi) * 1.6 * sharedMix.getMix().decay;
 }
 
 /** Deterministic stereo noise, increasingly filtered and faded to silence. */
@@ -263,12 +245,13 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   }
   function setState(next: InstrumentState) {
     if (!validateState(next).ok) return;
+    const replaced = next.arrangement !== state.arrangement;
     const reset =
-      isPresetReplacement(state, next) ||
+      replaced ||
       !next.soundEnabled ||
       next.activeView !== state.activeView ||
       next.maxVoices < state.maxVoices;
-    if (isPresetReplacement(state, next)) {
+    if (replaced) {
       liveOffsets = undefined;
       shades = [];
     }

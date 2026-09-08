@@ -1,28 +1,6 @@
-import type { Body, BodyId, InstrumentState, ViewName } from "./types";
+import type { BodyId, InstrumentState, ViewName } from "./types";
 
 export const pitchClass = (value: number): number => ((value % 12) + 12) % 12;
-
-/** Resolve a local offset in scale steps, carrying across octaves without rounding the sum. */
-export function offsetAtStep(state: InstrumentState, body: Body, step: number): number {
-  const index = state.scale.indexOf(pitchClass(body.pitchOffsetSemitones));
-  if (index < 0 || !Number.isInteger(step)) throw new Error("Invalid scale step.");
-  const degree = index + step;
-  return (
-    12 * (Math.floor(body.pitchOffsetSemitones / 12) + Math.floor(degree / state.scale.length)) +
-    (state.scale[degree % state.scale.length] ?? 0)
-  );
-}
-
-export function pitchOffsetAt(state: InstrumentState, body: Body, timeSeconds: number): number {
-  const drift = body.drift;
-  if (drift.mode === "still" || drift.target !== "pitch") return body.pitchOffsetSemitones;
-  if (drift.mode === "struck") return body.pitchOffsetSemitones + (drift.steps[0] ?? 0);
-  const phase = (((timeSeconds / drift.periodSeconds) % 1) + 1) % 1;
-  if (drift.mode === "sequence")
-    return body.pitchOffsetSemitones + (drift.steps[Math.floor(phase * drift.steps.length)] ?? 0);
-  const tick = Math.floor(phase * 2 * drift.amplitude);
-  return offsetAtStep(state, body, Math.min(tick, 2 * drift.amplitude - tick));
-}
 
 /** Explicit score time keeps this function pure; omitted time means the opening pitch. */
 export function soundingPitch(
@@ -41,9 +19,8 @@ export function soundingPitch(
     visited.add(cursor);
     const body = state.bodies.find((candidate) => candidate.id === cursor);
     if (!body) throw new Error(`Unknown body: ${cursor}`);
-    // A slow carrier sphere modulates its moons because its changing local offset
-    // is included in every descendant's ancestral sum, without changing any orbit.
-    offset += pitchOffsets?.[body.id] ?? pitchOffsetAt(state, body, timeSeconds);
+    // A live parent offset transposes every descendant without changing its orbit.
+    offset += pitchOffsets?.[body.id] ?? body.pitchOffsetSemitones;
     cursor = body.parentId;
   }
   const snapped = snapToScale(state.scale, offset);

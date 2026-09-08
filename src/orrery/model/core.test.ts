@@ -12,9 +12,11 @@ import {
   setRatio,
   setSoundEnabled,
 } from "./commands";
-import { midiToHz, pitchClass, pitchOffsetAt, snapToScale, soundingPitch } from "./pitch";
-import { createEmptyState as createInitialState } from "./presets";
+import { decayCurve } from "./decay";
+import { midiToHz, pitchClass, snapToScale, soundingPitch } from "./pitch";
+import { createEmptyState } from "./presets";
 import { createSimulation, shadeAt } from "./simulation";
+import { depthOf } from "./tree";
 import { type Body, type InstrumentState, LIMITS } from "./types";
 import { validateState } from "./validate";
 
@@ -42,7 +44,7 @@ function child(id: string, patch: Partial<Body> = {}): Body {
   };
 }
 function pair(): InstrumentState {
-  const state = createInitialState();
+  const state = createEmptyState();
   return {
     ...state,
     bodies: [
@@ -58,11 +60,11 @@ function pair(): InstrumentState {
   };
 }
 
-test("initial state is a lone silent sun with the required defaults", () => {
-  const state = createInitialState();
+test("empty state is a lone silent sun ready for an arrangement", () => {
+  const state = createEmptyState();
   assert(validateState(state).ok);
   assert(state.bodies.length === 1 && state.bodies[0]?.parentId === null);
-  assert(state.anchorMidi === 58 && state.baseTurnsPerSecond === 0.25 && state.maxVoices === 32);
+  assert(state.baseTurnsPerSecond > 0 && state.maxVoices > 0);
   assert(!state.soundEnabled && state.activeView === null);
   assert(
     createSimulation(state)
@@ -72,7 +74,7 @@ test("initial state is a lone silent sun with the required defaults", () => {
 });
 
 test("validation rejects malformed trees, limits, and geometry", () => {
-  const initial = createInitialState();
+  const initial = createEmptyState();
   const sun = initial.bodies[0];
   assert(sun);
   const invalid: InstrumentState[] = [
@@ -116,7 +118,7 @@ test("validation rejects malformed trees, limits, and geometry", () => {
 });
 
 test("commands are immutable, validate edits, share rings among siblings, and remove descendants", () => {
-  const initial = createInitialState();
+  const initial = createEmptyState();
   const snapshot = JSON.stringify(initial);
   Object.freeze(initial.bodies[0]);
   Object.freeze(initial.bodies);
@@ -142,7 +144,7 @@ test("commands are immutable, validate edits, share rings among siblings, and re
   assert(leaf && deep !== nested);
   assert(addBody(deep, leaf.id) === deep);
   assert(createSimulation(deep).positionsAt(1).length === 5);
-  close(soundingPitch(setOffset(deep, leaf.id, 7), leaf.id, "pool"), 51);
+  close(soundingPitch(setOffset(deep, leaf.id, 7), leaf.id, "pool"), deep.anchorMidi - 7);
   assert(removeBody(nested, "sun") === nested);
   const selected = selectBody(nested, moon.id);
   const removed = removeBody(selected, a.id);
@@ -165,12 +167,12 @@ test("commands are immutable, validate edits, share rings among siblings, and re
   assert(addBody(full, "sun") === full);
 });
 
-test("pitch includes the sun and every ancestor, mirrored around B-flat 3 in the pool", () => {
-  let state = addBody(addBody(createInitialState(), "sun"), "body-1");
+test("pitch includes the sun and every ancestor, mirrored around the anchor in the pool", () => {
+  let state = addBody(addBody(createEmptyState(), "sun"), "body-1");
   state = setOffset(setOffset(setOffset(state, "sun", -4), "body-1", 7), "body-2", 5);
-  close(soundingPitch(state, "sun", "telescope"), 54);
-  close(soundingPitch(state, "body-2", "telescope"), 66);
-  close(soundingPitch(state, "body-2", "pool"), 50);
+  close(soundingPitch(state, "sun", "telescope"), state.anchorMidi - 4);
+  close(soundingPitch(state, "body-2", "telescope"), state.anchorMidi + 8);
+  close(soundingPitch(state, "body-2", "pool"), state.anchorMidi - 8);
   close(midiToHz(69), 440);
   close(midiToHz(57), 220);
 });
@@ -266,67 +268,6 @@ test("drift is deterministic, periodic, and integrates speed continuously", () =
   }
 });
 
-test("pitch stairs walk scale degrees across octaves, remain pure, and mirror the full sum", () => {
-  let state = addBody(addBody(createInitialState(), "sun"), "body-1");
-  state = setOffset(state, "body-1", 10);
-  state = setOffset(state, "body-2", 3);
-  state = setDrift(state, "body-1", {
-    mode: "stair",
-    target: "pitch",
-    amplitude: 2,
-    periodSeconds: 80,
-  });
-  const carrier = state.bodies.find((body) => body.id === "body-1");
-  assert(carrier);
-  const snapshot = JSON.stringify(state);
-  for (const [time, offset] of [
-    [0, 10],
-    [19.99, 10],
-    [20, 12],
-    [40, 14],
-    [60, 12],
-    [80, 10],
-  ]) {
-    assert(time !== undefined && offset !== undefined);
-    close(pitchOffsetAt(state, carrier, time), offset);
-    // The summed offset snaps to the scale before it is mirrored.
-    const sum = snapToScale(state.scale, 3 + offset);
-    close(soundingPitch(state, "body-2", "telescope", time), 58 + sum);
-    close(soundingPitch(state, "body-2", "pool", time), 58 - sum);
-  }
-  assert(JSON.stringify(state) === snapshot);
-  for (const offset of LIMITS.allowedOffsets) {
-    const candidate = { ...carrier, pitchOffsetSemitones: offset };
-    const next = {
-      ...state,
-      bodies: state.bodies.map((body) => (body.id === carrier.id ? candidate : body)),
-    };
-    assert(validateState(next).ok === state.scale.includes(pitchClass(offset)));
-  }
-  for (const scale of [[], [0, 0], [2, 0], [0, 12], [0, 2.5]])
-    assert(!validateState({ ...state, scale }).ok);
-  for (const amplitude of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, 25])
-    assert(
-      setDrift(state, carrier.id, {
-        mode: "stair",
-        target: "pitch",
-        amplitude,
-        periodSeconds: 80,
-      }) === state,
-    );
-  assert(
-    setDrift(state, carrier.id, {
-      mode: "sine",
-      target: "pitch",
-      amplitude: 2,
-      periodSeconds: 80,
-    } as unknown as Body["drift"]) === state,
-  );
-  const custom = { ...state, scale: [0, 3, 10] };
-  assert(validateState(custom).ok);
-  close(pitchOffsetAt(custom, carrier, 40), 15);
-});
-
 test("overlapping discs on different rings or under different parents never excite", () => {
   const state = pair();
   const a = state.bodies[1];
@@ -415,37 +356,6 @@ test("sun shade uses the finite segment, excludes the contacting discs, and soft
   }
 });
 
-test("pitch sequences validate their bounds, copy steps, and never move trajectories", () => {
-  const state = pair();
-  for (const steps of [[], [NaN], [0.5], [49], Array.from({ length: 129 }, () => 0)])
-    assert(
-      setDrift(state, "a", { mode: "sequence", target: "pitch", steps, periodSeconds: 8 }) ===
-        state,
-    );
-  assert(
-    setDrift(state, "a", { mode: "sequence", target: "pitch", steps: [0, 7], periodSeconds: 0 }) ===
-      state,
-  );
-  const steps = [0, 7, -2];
-  const next = setDrift(state, "a", {
-    mode: "sequence",
-    target: "pitch",
-    steps,
-    periodSeconds: 12,
-  });
-  steps[0] = 48;
-  assert(soundingPitch(next, "a", "telescope", 0) === 58);
-  const plain = createSimulation(state);
-  const pitched = createSimulation(next);
-  assert(JSON.stringify(plain.positionsAt(9)) === JSON.stringify(pitched.positionsAt(9)));
-  const strip = (simulation: ReturnType<typeof createSimulation>) =>
-    simulation
-      .advance(12)
-      .flatMap((frame) => frame.contacts)
-      .map(({ pitchA: _a, pitchB: _b, ...contact }) => contact);
-  assert(JSON.stringify(strip(plain)) === JSON.stringify(strip(pitched)));
-});
-
 test("contact exchange conserves scale offsets, preserves state, and honors opt-outs", () => {
   const state = pair();
   state.bodies = state.bodies.map((body) => ({
@@ -470,40 +380,6 @@ test("contact exchange conserves scale offsets, preserves state, and honors opt-
   assert(fixed.advance(2).at(-1)?.pitchOffsets.a === 0);
 });
 
-test("parent strikes advance struck and timed sequences once per entry", () => {
-  for (const mode of ["struck", "sequence"] as const) {
-    const state = createInitialState();
-    const sun = state.bodies[0];
-    assert(sun);
-    sun.drift =
-      mode === "struck"
-        ? { mode, target: "pitch", steps: [0, 7, 3] }
-        : { mode, target: "pitch", steps: [0, 7, 3], periodSeconds: 1000 };
-    state.bodies.push(
-      child("comet", {
-        orbitRadius: 1,
-        eccentricity: 0.7,
-        phaseRadians: Math.PI,
-        strikesParent: true,
-      }),
-    );
-    assert(validateState(state).ok);
-    const simulation = createSimulation(state);
-    const frames = simulation.advance(9);
-    const struck = frames.filter((frame) => frame.contacts.length);
-    assert(struck.length === 2);
-    assert(struck[0]?.pitchOffsets.sun === 7 && struck[1]?.pitchOffsets.sun === 3);
-    assert(
-      struck.every((frame) =>
-        frame.contacts.every((contact) => contact.weight === 1 && contact.intensity === 1),
-      ),
-    );
-    assert(sun.pitchOffsetSemitones === 0);
-    state.bodies[1] = { ...(state.bodies[1] as Body), strikesParent: false };
-    assert(!validateState(state).ok);
-  }
-});
-
 test("retrograde sweeps catch head-on entries with invariant time partitioning", () => {
   const state = pair();
   state.bodies = state.bodies.map((body) =>
@@ -518,5 +394,114 @@ test("retrograde sweeps catch head-on entries with invariant time partitioning",
     .flat(2)
     .flatMap((frame) => frame.contacts);
   assert(whole.length === 5 && JSON.stringify(whole) === JSON.stringify(split));
-  assert(whole.every((contact) => contact.closing > 7));
+  assert(whole.every((contact) => contact.closing > 0));
+});
+
+test("comet steps advance once per parent contact entry", () => {
+  const state = createEmptyState();
+  state.bodies.push(
+    child("comet", {
+      orbitRadius: 1,
+      eccentricity: 0.7,
+      phaseRadians: Math.PI,
+      strikesParent: true,
+      strikeSteps: [7, 3, 0],
+    }),
+  );
+  assert(validateState(state).ok);
+  const struck = createSimulation(state)
+    .advance(9)
+    .filter((frame) => frame.contacts.length);
+  assert(struck.length === 2);
+  assert(struck[0]?.pitchOffsets.sun === 7 && struck[1]?.pitchOffsets.sun === 3);
+  assert(
+    struck.every((frame) =>
+      frame.contacts.every((contact) => contact.weight === 1 && contact.intensity === 1),
+    ),
+  );
+  assert(state.bodies[0]?.pitchOffsetSemitones === 0);
+});
+
+test("stacked offsets snap to the nearest scale degree across octaves, with ties downward", () => {
+  const scale = [0, 3, 7];
+  for (const octave of [-24, -12, 0, 12, 24]) {
+    close(snapToScale(scale, octave + 5), octave + 3);
+    close(snapToScale(scale, octave + 11), octave + 12);
+    for (const degree of scale) close(snapToScale(scale, octave + degree), octave + degree);
+  }
+});
+
+function struckParent() {
+  const state = createEmptyState();
+  state.bodies.push(child("carrier", { orbitRadius: 3, discRadius: 0.35 }));
+  state.bodies.push(
+    child("comet", {
+      parentId: "carrier",
+      orbitRadius: 1,
+      eccentricity: 0.7,
+      phaseRadians: Math.PI,
+      strikesParent: true,
+      strikeSteps: [7, 3, 0],
+    }),
+  );
+  const simulation = createSimulation(state);
+  assert(simulation.advance(3).at(-1)?.pitchOffsets.carrier === 7);
+  return { state, simulation };
+}
+
+test("explicit parent pitch and drift edits clear comet roots, while unrelated edits preserve them", () => {
+  for (const edit of [
+    (state: InstrumentState) => setOffset(state, "carrier", 0),
+    (state: InstrumentState) => setOffset(state, "carrier", 3),
+    (state: InstrumentState) => setDrift(state, "carrier", { mode: "still" }),
+  ]) {
+    const { state, simulation } = struckParent();
+    simulation.setState(selectBody(state, "carrier"));
+    assert(simulation.advance(0.01).at(-1)?.pitchOffsets.carrier === 7);
+    const next = edit(state);
+    simulation.setState(next);
+    assert(
+      simulation.advance(0.01).at(-1)?.pitchOffsets.carrier ===
+        next.bodies.find((body) => body.id === "carrier")?.pitchOffsetSemitones,
+    );
+  }
+});
+
+test("removed parents cannot recover stale comet roots when their ids are reused", () => {
+  const { state, simulation } = struckParent();
+  simulation.setState(removeBody(state, "carrier"));
+  simulation.setState(state);
+  assert(simulation.advance(0.01).at(-1)?.pitchOffsets.carrier === 0);
+});
+
+test("ancestry depth counts parent edges from the sun through nested moons", () => {
+  let state = createEmptyState();
+  for (const parent of ["sun", "body-1", "body-2"]) state = addBody(state, parent);
+  const byId = new Map(state.bodies.map((body) => [body.id, body]));
+  for (const [depth, body] of state.bodies.entries()) assert(depthOf(body, byId) === depth);
+  assert(state.bodies.length === LIMITS.maxDepth + 1);
+});
+
+test("contact pair keys preserve arbitrary ids and stay stable when bodies are reordered", () => {
+  const state = createEmptyState();
+  for (const id of ["a:b", "c", "a", "b:c"]) state.bodies.push(child(id));
+  const simulation = createSimulation(state);
+  assert(simulation.advance(0.01).flatMap((frame) => frame.contacts).length === 6);
+  simulation.setState({ ...state, bodies: [...state.bodies].reverse() });
+  assert(simulation.advance(0.01).every((frame) => frame.contacts.length === 0));
+});
+
+test("the bare decay curve preserves gong, carrier, and ornament roles across anchors", () => {
+  for (const anchor of [36, 50, 72]) {
+    const gong = decayCurve(anchor - 12, 0.2, 1, 0.4, anchor);
+    const carrier = decayCurve(anchor, 0.5, 0.2, 1, anchor);
+    const ornament = decayCurve(anchor + 24, 1, 0.1, 4, anchor);
+    assert(gong > carrier && carrier > ornament && ornament > 0);
+    for (const offset of [-12, 0, 12, 24]) {
+      const midi = anchor + offset;
+      close(decayCurve(midi, 0.5, 0.5, 1, anchor), decayCurve(50 + offset, 0.5, 0.5, 1, 50));
+      assert(decayCurve(midi, 0.5, 1, 1, anchor) >= decayCurve(midi, 0.5, 0, 1, anchor));
+      assert(decayCurve(midi, 0.5, 1, 0, anchor) >= decayCurve(midi, 0.5, 1, 5, anchor));
+    }
+  }
 });

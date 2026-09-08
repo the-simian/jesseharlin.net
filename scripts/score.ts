@@ -8,27 +8,32 @@
  * without ears. Velocity comes from contact intensity; note length from the
  * same decay curve the voice engine uses, so the roll shows what rings.
  */
-import { writeFileSync } from "node:fs";
-import { decayFor } from "../src/orrery/audio/voice";
+import { decayCurve } from "../src/orrery/model/decay";
 import { PRESETS } from "../src/orrery/model/presets";
 import { createSimulation } from "../src/orrery/model/simulation";
 import type { Contact, InstrumentState } from "../src/orrery/model/types";
 import { validateState } from "../src/orrery/model/validate";
 
+// Keep this standalone tool's Bun contract local; the browser app does not install Bun globals.
+declare const Bun: {
+  argv: string[];
+  write(path: string, data: Uint8Array): Promise<number>;
+};
+
 const [presetId = PRESETS[0]?.id ?? "", secondsArg = "120", view = "telescope", outArg] =
-  process.argv.slice(2);
+  Bun.argv.slice(2);
 const seconds = Number(secondsArg);
-const ALL = [...PRESETS];
-const preset = ALL.find((candidate) => candidate.id === presetId);
+if (!Number.isInteger(seconds) || seconds <= 0)
+  throw new Error("Seconds must be a positive integer.");
+if (view !== "telescope" && view !== "pool") throw new Error("View must be telescope or pool.");
+const preset = PRESETS.find((candidate) => candidate.id === presetId);
 if (!preset) {
-  console.error(`Unknown preset "${presetId}". Known: ${ALL.map((p) => p.id).join(", ")}`);
-  process.exit(1);
+  throw new Error(`Unknown preset "${presetId}". Known: ${PRESETS.map((p) => p.id).join(", ")}`);
 }
 const state: InstrumentState = preset.build();
 const problems = validateState(state);
 if (!problems.ok) {
-  console.error(`${preset.name} is invalid:\n  ${problems.problems.join("\n  ")}`);
-  process.exit(1);
+  throw new Error(`${preset.name} is invalid:\n  ${problems.problems.join("\n  ")}`);
 }
 const simulation = createSimulation(state);
 const contacts: Contact[] = [];
@@ -39,13 +44,19 @@ for (let second = 0; second < seconds; second++) {
 type Note = { time: number; midi: number; velocity: number; length: number; body: string };
 const mirror = (midi: number) => (view === "pool" ? 2 * state.anchorMidi - midi : midi);
 const notes: Note[] = contacts.flatMap((contact) => {
-  const extra = contact as Contact & { weight?: number; closing?: number };
   const velocity = Math.round(30 + 97 * Math.min(1, contact.intensity));
   const make = (midi: number, body: string): Note => ({
     time: contact.time,
     midi: mirror(midi),
     velocity,
-    length: decayFor(mirror(midi), contact.intensity, extra.weight, extra.closing),
+    length:
+      decayCurve(
+        mirror(midi),
+        contact.intensity,
+        contact.weight,
+        contact.closing,
+        state.anchorMidi,
+      ) * (contact.weight >= 0.99 ? 1.4 : 1),
     body,
   });
   return [make(contact.pitchA, contact.a), make(contact.pitchB, contact.b)];
@@ -63,7 +74,7 @@ function variableLength(value: number): number[] {
   }
   return bytes;
 }
-type Event = { tick: number; bytes: number[] };
+type Event = { tick: number; bytes: [number, number, number] };
 const events: Event[] = [];
 for (const note of notes) {
   const midi = Math.max(0, Math.min(127, Math.round(note.midi)));
@@ -82,11 +93,26 @@ for (const event of events) {
 track.push(0x00, 0xff, 0x2f, 0x00);
 const be32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
 const file = new Uint8Array([
-  0x4d, 0x54, 0x68, 0x64, ...be32(6), 0, 0, 0, 1, (TPQ >> 8) & 255, TPQ & 255,
-  0x4d, 0x54, 0x72, 0x6b, ...be32(track.length), ...track,
+  0x4d,
+  0x54,
+  0x68,
+  0x64,
+  ...be32(6),
+  0,
+  0,
+  0,
+  1,
+  (TPQ >> 8) & 255,
+  TPQ & 255,
+  0x4d,
+  0x54,
+  0x72,
+  0x6b,
+  ...be32(track.length),
+  ...track,
 ]);
 const out = outArg ?? `scores/${preset.id}-${view}.mid`;
-writeFileSync(out, file);
+await Bun.write(out, file);
 
 // --- Terminal piano roll: one column per second, one row per sounding pitch ---
 const pitches = [...new Set(notes.map((n) => Math.round(n.midi)))].sort((a, b) => b - a);
@@ -94,9 +120,11 @@ const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const name = (midi: number) => `${NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 const columns = Math.min(seconds, 120);
 console.log(`\n${preset.name} (${view}): ${notes.length / 2} contacts in ${seconds} s, ${out}`);
-console.log(`${"".padStart(5)}${[...Array(columns).keys()].map((i) => (i % 10 === 0 ? String(i / 10 % 10) : ".")).join("")}`);
+console.log(
+  `${"".padStart(5)}${[...Array(columns).keys()].map((i) => (i % 10 === 0 ? String((i / 10) % 10) : ".")).join("")}`,
+);
 for (const midi of pitches) {
-  const row = Array(columns).fill(" ");
+  const row: string[] = Array(columns).fill(" ");
   for (const note of notes) {
     if (Math.round(note.midi) !== midi || note.time >= columns) continue;
     const start = Math.floor(note.time);
@@ -127,8 +155,12 @@ const chroma: string[] = [];
 for (let w = 0; w < windows; w++) {
   const from = (seconds / windows) * w;
   const to = from + seconds / windows;
-  const counts = new Array(12).fill(0);
-  for (const note of notes) if (note.time >= from && note.time < to) counts[((Math.round(note.midi) % 12) + 12) % 12]++;
+  const counts: number[] = new Array(12).fill(0);
+  for (const note of notes) {
+    if (note.time < from || note.time >= to) continue;
+    const pc = ((Math.round(note.midi) % 12) + 12) % 12;
+    counts[pc] = (counts[pc] ?? 0) + 1;
+  }
   const top = counts
     .map((count, pc) => ({ count, pc }))
     .sort((a, b) => b.count - a.count)
@@ -137,10 +169,23 @@ for (let w = 0; w < windows; w++) {
     .map((entry) => `${NAMES[entry.pc]}:${entry.count}`);
   chroma.push(`${Math.round(from)}-${Math.round(to)}s [${top.join(" ")}]`);
 }
-console.log(`\ncontacts/min ${perMinute.toFixed(1)}; distinct pitches ${pitches.length}; range ${name(pitches.at(-1) ?? 0)}..${name(pitches[0] ?? 0)}`);
+console.log(
+  `\ncontacts/min ${perMinute.toFixed(1)}; distinct pitches ${pitches.length}; range ${name(pitches.at(-1) ?? 0)}..${name(pitches[0] ?? 0)}`,
+);
 console.log(`gaps between contacts: ${gapHistogram.join("  ")}`);
-console.log(`dyad intervals (semitones mod 12): ${[...dyads.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}:${v}`).join(" ")}`);
+console.log(
+  `dyad intervals (semitones mod 12): ${[...dyads.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k}:${v}`)
+    .join(" ")}`,
+);
 console.log(`pitch classes by quarter: ${chroma.join(" | ")}`);
 const byBody = new Map<string, number>();
 for (const note of notes) byBody.set(note.body, (byBody.get(note.body) ?? 0) + 1);
-console.log(`busiest bodies: ${[...byBody.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}:${v}`).join(" ")}`);
+console.log(
+  `busiest bodies: ${[...byBody.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(" ")}`,
+);

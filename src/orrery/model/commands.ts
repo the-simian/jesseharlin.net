@@ -7,9 +7,18 @@ function accept(previous: InstrumentState, next: InstrumentState): InstrumentSta
 }
 function edit(state: InstrumentState, id: BodyId, patch: Partial<Body>): InstrumentState {
   if (!state.bodies.some((body) => body.id === id)) return state;
+  const resetsPitch = "pitchOffsetSemitones" in patch || "drift" in patch;
   return accept(state, {
     ...state,
-    bodies: state.bodies.map((body) => (body.id === id ? { ...body, ...patch } : body)),
+    bodies: state.bodies.map((body) =>
+      body.id === id
+        ? {
+            ...body,
+            ...patch,
+            ...(resetsPitch ? { pitchRevision: (body.pitchRevision ?? 0) + 1 } : {}),
+          }
+        : body,
+    ),
   });
 }
 export function createInitialState(): InstrumentState {
@@ -23,6 +32,7 @@ export function applyPreset(state: InstrumentState, presetId: string): Instrumen
   if (!preset) return state;
   return accept(state, {
     ...preset.build(),
+    arrangement: state.arrangement + 1,
     soundEnabled: state.soundEnabled,
     activeView: state.activeView,
   });
@@ -100,10 +110,7 @@ export const setOffset = (state: InstrumentState, id: BodyId, pitchOffsetSemiton
   edit(state, id, { pitchOffsetSemitones });
 export const setDrift = (state: InstrumentState, id: BodyId, drift: Drift) =>
   edit(state, id, {
-    drift:
-      drift.mode === "sequence" || drift.mode === "struck"
-        ? { ...drift, steps: [...drift.steps] }
-        : { ...drift },
+    drift: { ...drift },
   });
 export const setPhase = (state: InstrumentState, id: BodyId, phaseRadians: number) =>
   edit(state, id, { phaseRadians });

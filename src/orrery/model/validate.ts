@@ -1,10 +1,12 @@
-import { offsetAtStep, pitchClass } from "./pitch";
+import { pitchClass } from "./pitch";
 import { type InstrumentState, LIMITS } from "./types";
 
 export function validateState(
   state: InstrumentState,
 ): { ok: true } | { ok: false; problems: string[] } {
   const problems: string[] = [];
+  if (!Number.isSafeInteger(state.arrangement) || state.arrangement < 0)
+    problems.push("Arrangement revision must be a nonnegative safe integer.");
   const validScale =
     Array.isArray(state.scale) &&
     state.scale.length > 0 &&
@@ -64,45 +66,27 @@ export function validateState(
     if (!LIMITS.allowedOffsets.includes(body.pitchOffsetSemitones)) fail("Invalid pitch offset.");
     const onScale = validScale && state.scale.includes(pitchClass(body.pitchOffsetSemitones));
     if (!onScale) fail("Pitch offset must belong to the scale.");
+    if (
+      body.pitchRevision !== undefined &&
+      (!Number.isSafeInteger(body.pitchRevision) || body.pitchRevision < 0)
+    )
+      fail("Pitch revision must be a nonnegative safe integer.");
     const drift = body.drift;
-    if (drift.mode === "sequence" || drift.mode === "struck") {
-      if (
-        drift.target !== "pitch" ||
-        !Array.isArray(drift.steps) ||
-        drift.steps.length === 0 ||
-        drift.steps.length > 128 ||
-        !drift.steps.every((step) => Number.isInteger(step) && Math.abs(step) <= 48) ||
-        (drift.mode === "sequence" &&
-          (!Number.isFinite(drift.periodSeconds) || drift.periodSeconds <= 0))
-      )
-        fail(
-          "Pitch steps require 1 to 128 integers within four octaves; timed sequences also need a positive period.",
-        );
-    } else if (drift.mode !== "still") {
+    if (drift.mode !== "still") {
       if (
         !["sine", "stair"].includes(drift.mode) ||
-        !["speed", "orbitRadius", "pitch"].includes(drift.target) ||
+        !["speed", "orbitRadius"].includes(drift.target) ||
         !Number.isFinite(drift.amplitude) ||
         drift.amplitude < 0 ||
         !Number.isFinite(drift.periodSeconds) ||
         drift.periodSeconds <= 0
       )
         fail("Invalid drift.");
-      if (drift.target === "pitch") {
-        // A bounded integer amplitude makes the complete set of reachable values enumerable.
-        if (drift.mode !== "stair" || !Number.isInteger(drift.amplitude) || drift.amplitude > 24)
-          fail("Pitch drift requires a stair and an integer amplitude from 0 to 24 scale steps.");
-        else if (onScale && drift.amplitude >= 0)
-          for (let step = 0; step <= drift.amplitude; step++)
-            if (!state.scale.includes(pitchClass(offsetAtStep(state, body, step))))
-              fail("Drifted pitch must belong to the scale.");
-      }
       if (drift.target === "speed" && drift.amplitude > 1)
         fail("Speed drift amplitude exceeds one.");
     }
     if (body.parentId === null) {
-      if (body.orbitRadius !== 0 || (drift.mode !== "still" && drift.target !== "pitch"))
-        fail("Sun must remain at the origin.");
+      if (body.orbitRadius !== 0 || drift.mode !== "still") fail("Sun must remain at the origin.");
     } else {
       const parent = byId.get(body.parentId);
       if (!parent) fail("Parent does not exist.");

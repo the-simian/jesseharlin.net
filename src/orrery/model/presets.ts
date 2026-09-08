@@ -9,6 +9,7 @@ export type Preset = {
 
 export function createEmptyState(): InstrumentState {
   return {
+    arrangement: 0,
     bodies: [
       {
         id: "sun",
@@ -37,36 +38,6 @@ export function createEmptyState(): InstrumentState {
 
 const ratio = (numerator: number, denominator = 1): Ratio => ({ numerator, denominator });
 
-function add(
-  state: InstrumentState,
-  id: string,
-  parentId: string,
-  orbitRadius: number,
-  discRadius: number,
-  speedRatio: Ratio,
-  pitchOffsetSemitones: number,
-  eccentricity = 0.2,
-  phaseRadians = 0,
-  periapsisRadians = 0,
-): Body {
-  const body: Body = {
-    id,
-    parentId,
-    orbitRadius,
-    discRadius,
-    speedRatio,
-    pitchOffsetSemitones,
-    eccentricity,
-    phaseRadians,
-    periapsisRadians,
-    exchangesPitch: parentId !== "sun",
-    strikesParent: false,
-    drift: { mode: "still" },
-  };
-  state.bodies.push(body);
-  return body;
-}
-
 /** One root per comet passage; eight passages return to D. */
 export const FOLIA_ROOTS = [0, -5, 0, -2, 3, -2, 0, -5] as const;
 
@@ -77,16 +48,34 @@ export function laFolia(): InstrumentState {
   state.scale = [0, 2, 3, 5, 7, 8, 10];
   state.baseTurnsPerSecond = 0.05;
   const sun = state.bodies[0];
-  if (sun) {
-    sun.discRadius = 1.7;
-    sun.drift = { mode: "struck", target: "pitch", steps: [...FOLIA_ROOTS] };
-  }
-  const bass = add(state, "bass", "sun", 3.1, 0.35, ratio(1, 4), -12, 0.3);
-  bass.exchangesPitch = false;
+  if (sun) sun.discRadius = 1.7;
+  place(state, "bass", "sun", {
+    ring: 3.1,
+    disc: 0.35,
+    speed: ratio(1, 4),
+    pitch: -12,
+    e: 0.3,
+    exchanges: false,
+  });
   for (const [i, speed] of [ratio(1, 4), ratio(1, 3), ratio(1, 2), ratio(2, 3)].entries())
-    add(state, `bass-gong-${i}`, "bass", 1.2, 0.32, speed, 0, 0.25, 0.7 + i * 1.5, i * 0.5);
-  const tenor = add(state, "tenor", "bass", 3, 0.2, ratio(1, 3), 12, 0.2, 1);
-  tenor.exchangesPitch = false;
+    place(state, `bass-gong-${i}`, "bass", {
+      ring: 1.2,
+      disc: 0.32,
+      speed,
+      pitch: 0,
+      e: 0.25,
+      phase: 0.7 + i * 1.5,
+      periapsis: i * 0.5,
+    });
+  place(state, "tenor", "bass", {
+    ring: 3,
+    disc: 0.2,
+    speed: ratio(1, 3),
+    pitch: 12,
+    e: 0.2,
+    phase: 1,
+    exchanges: false,
+  });
   for (const [i, speed] of [
     ratio(1, 4),
     ratio(1, 2),
@@ -95,34 +84,69 @@ export function laFolia(): InstrumentState {
     ratio(3, 2),
     ratio(2),
   ].entries()) {
-    add(state, `tenor-${i}`, "tenor", 0.8, 0.11, speed, i % 2 ? 7 : 3, 0.22, i * 1.03, i * 0.37);
+    place(state, `tenor-${i}`, "tenor", {
+      ring: 0.8,
+      disc: 0.11,
+      speed,
+      pitch: i % 2 ? 7 : 3,
+      e: 0.22,
+      phase: i * 1.03,
+      periapsis: i * 0.37,
+    });
   }
-  add(state, "soprano", "sun", 7, 0.14, ratio(1, 2), 12, 0.35, 2);
+  place(state, "soprano", "sun", {
+    ring: 7,
+    disc: 0.14,
+    speed: ratio(1, 2),
+    pitch: 12,
+    e: 0.35,
+    phase: 2,
+  });
   for (const [i, speed] of [1, 1.5, 2, 3, 4, 5].entries())
-    add(
-      state,
-      `soprano-${i}`,
-      "soprano",
-      0.6,
-      0.065,
-      speed === 1.5 ? ratio(3, 2) : ratio(speed),
-      [0, 2, 3, 7, 10, 12][i] ?? 0,
-      0.45,
-      i * 1.07,
-      i * 0.41,
-    );
+    place(state, `soprano-${i}`, "soprano", {
+      ring: 0.6,
+      disc: 0.065,
+      speed: speed === 1.5 ? ratio(3, 2) : ratio(speed),
+      pitch: [0, 2, 3, 7, 10, 12][i] ?? 0,
+      e: 0.45,
+      phase: i * 1.07,
+      periapsis: i * 0.41,
+    });
   for (const [i, speed] of [3, 5].entries())
-    add(state, `silver-${i}`, "soprano-0", 0.25, 0.035, ratio(speed), i * 7, 0.4, i * 2, i * 0.8);
+    place(state, `silver-${i}`, "soprano-0", {
+      ring: 0.25,
+      disc: 0.035,
+      speed: ratio(speed),
+      pitch: i * 7,
+      e: 0.4,
+      phase: i * 2,
+      periapsis: i * 0.8,
+    });
   for (const id of ["soprano-0", "tenor-0"]) {
     const moon = state.bodies.find((body) => body.id === id);
     if (moon) moon.speedRatio.numerator *= -1;
   }
   // The comet: a long oval that grazes the sun once per turn and crosses every
   // ring on the way in and out. Each strike sets the next root of the road.
-  const comet = add(state, "comet", "sun", 11, 0.16, ratio(1), -12, 0.86, Math.PI, 0.6);
-  comet.strikesParent = true;
-  comet.strikeSteps = [-5, 0, -2, 3, -2, 0, -5, 0];
-  add(state, "comet-moon", "comet", 0.4, 0.06, ratio(3), 7, 0.2, 1);
+  place(state, "comet", "sun", {
+    ring: 11,
+    disc: 0.16,
+    speed: ratio(1),
+    pitch: -12,
+    e: 0.86,
+    phase: Math.PI,
+    periapsis: 0.6,
+    strikes: true,
+    strikeSteps: [...FOLIA_ROOTS.slice(1), FOLIA_ROOTS[0]],
+  });
+  place(state, "comet-moon", "comet", {
+    ring: 0.4,
+    disc: 0.06,
+    speed: ratio(3),
+    pitch: 7,
+    e: 0.2,
+    phase: 1,
+  });
   return state;
 }
 
@@ -136,6 +160,8 @@ type Spec = {
   periapsis?: number;
   exchanges?: boolean;
   strikes?: boolean;
+  drift?: Body["drift"];
+  strikeSteps?: readonly number[];
 };
 
 function place(state: InstrumentState, id: string, parentId: string, spec: Spec): Body {
@@ -151,7 +177,8 @@ function place(state: InstrumentState, id: string, parentId: string, spec: Spec)
     periapsisRadians: spec.periapsis ?? 0,
     exchangesPitch: spec.exchanges ?? parentId !== "sun",
     strikesParent: spec.strikes ?? false,
-    drift: { mode: "still" },
+    drift: spec.drift ? { ...spec.drift } : { mode: "still" },
+    ...(spec.strikeSteps ? { strikeSteps: [...spec.strikeSteps] } : {}),
   };
   state.bodies.push(body);
   return body;
@@ -167,10 +194,7 @@ export function wellPassacaglia(): InstrumentState {
   state.scale = [0, 2, 3, 5, 7, 9, 10];
   state.baseTurnsPerSecond = 0.045;
   const sun = state.bodies[0];
-  if (sun) {
-    sun.discRadius = 1.7;
-    sun.drift = { mode: "struck", target: "pitch", steps: [0, -2, -3, -5, -3, -2] };
-  }
+  if (sun) sun.discRadius = 1.7;
   // Ground: two heavy gongs on one oval, slow, a fifth apart, that meet head-on.
   place(state, "ground", "sun", {
     ring: 3.2,
@@ -260,14 +284,15 @@ export function wellPassacaglia(): InstrumentState {
     e: 0.3,
   });
   place(state, "comet", "sun", {
-    ring: 6.2,
+    ring: 12,
     disc: 0.15,
-    speed: ratio(1, 2),
+    speed: ratio(1),
     pitch: -12,
-    e: 0.7,
+    e: 0.88,
     phase: Math.PI,
     periapsis: 2.4,
     strikes: true,
+    strikeSteps: [-2, -3, -5, -3, -2, 0],
   });
   place(state, "comet-moon", "comet", { ring: 0.4, disc: 0.05, speed: ratio(4), pitch: 7, e: 0.2 });
   return state;
@@ -352,10 +377,7 @@ export function ladder(): InstrumentState {
   state.scale = [0, 2, 4, 6, 7, 9, 11];
   state.baseTurnsPerSecond = 0.035;
   const sun = state.bodies[0];
-  if (sun) {
-    sun.discRadius = 1.9;
-    sun.drift = { mode: "struck", target: "pitch", steps: [0, 7, 2, 9, 4, 9, 2, 7] };
-  }
+  if (sun) sun.discRadius = 1.9;
   place(state, "deep", "sun", {
     ring: 3.4,
     disc: 0.32,
@@ -443,14 +465,15 @@ export function ladder(): InstrumentState {
     e: 0.3,
   });
   place(state, "comet", "sun", {
-    ring: 6.8,
+    ring: 12,
     disc: 0.15,
-    speed: ratio(1, 2),
+    speed: ratio(1),
     pitch: 0,
-    e: 0.7,
+    e: 0.88,
     phase: Math.PI,
     periapsis: 3.9,
     strikes: true,
+    strikeSteps: [7, 2, 9, 4, 9, 2, 7, 0],
   });
   place(state, "comet-moon", "comet", { ring: 0.4, disc: 0.05, speed: ratio(3), pitch: 7, e: 0.2 });
   return state;
@@ -467,11 +490,7 @@ export function lanternRoad(): InstrumentState {
   state.scale = [0, 2, 4, 5, 7, 9, 11];
   state.baseTurnsPerSecond = 0.05;
   const sun = state.bodies[0];
-  if (sun) {
-    sun.discRadius = 1.7;
-    // Roots relative to F: F, G, E, A; then the same road again a step lower to return.
-    sun.drift = { mode: "struck", target: "pitch", steps: [0, 2, -1, 4, 0, 2, -1, 4] };
-  }
+  if (sun) sun.discRadius = 1.7;
   place(state, "bass", "sun", {
     ring: 3.2,
     disc: 0.32,
@@ -550,14 +569,15 @@ export function lanternRoad(): InstrumentState {
     e: 0.3,
   });
   place(state, "comet", "sun", {
-    ring: 6.1,
+    ring: 12,
     disc: 0.15,
-    speed: ratio(1, 2),
+    speed: ratio(1),
     pitch: -12,
-    e: 0.7,
+    e: 0.88,
     phase: Math.PI,
     periapsis: 0.9,
     strikes: true,
+    strikeSteps: [2, -1, 4, 0, 2, -1, 4, 0],
   });
   place(state, "comet-moon", "comet", { ring: 0.4, disc: 0.05, speed: ratio(3), pitch: 7, e: 0.2 });
   return state;
@@ -627,7 +647,7 @@ export function coldHarbour(): InstrumentState {
   const comet = state.bodies.find((body) => body.id === "comet");
   if (comet) comet.strikeSteps = [3, -2, 0, -5, 3, -2, 0, -5, 0];
   // A second, slower comet on its own road; whichever struck last holds the key.
-  const second = place(state, "comet-2", "sun", {
+  place(state, "comet-2", "sun", {
     ring: 14,
     disc: 0.14,
     speed: ratio(1, 3),
@@ -636,8 +656,8 @@ export function coldHarbour(): InstrumentState {
     phase: 0.4,
     periapsis: 4.1,
     strikes: true,
+    strikeSteps: [-5, 0],
   });
-  second.strikeSteps = [-5, 0];
   return state;
 }
 
@@ -724,10 +744,9 @@ export function getPresetId(state: InstrumentState): string | null {
 }
 
 /** A whole arrangement replacement restarts its score without resetting the runtime clock. */
-export function isPresetReplacement(previous: InstrumentState, next: InstrumentState): boolean {
-  return (
-    previous.bodies !== next.bodies &&
-    next.bodies.every((body) => !previous.bodies.includes(body)) &&
-    getPresetId(next) !== null
-  );
+export function arrangementChanged(previous: InstrumentState, next: InstrumentState): boolean {
+  return previous.arrangement !== next.arrangement;
 }
+
+/** Compatibility for audio consumers during the engine migration. */
+export const isPresetReplacement = arrangementChanged;
