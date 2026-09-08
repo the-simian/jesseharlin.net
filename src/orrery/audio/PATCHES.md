@@ -42,3 +42,12 @@ patch has a JSON form at `https://patches.fm/patches/dx7/<first two hex>/<signat
 Intended use for the moon alternatives: a moon's colour names its patch, so a
 colour of moon becomes swappable and the map from colour to patch is the
 instrument's palette.
+
+- **FLUTIE** (`b23bece781d25a9fde1c94a3e76210a05281ec6f`): an alternative
+  planet. Algorithm 16 (one carrier, op 1, fed by a branching stack), feedback
+  5, triangle LFO speed 33 delayed, light amplitude and pitch depth for breath.
+  Ops 3 and 6 modulate the carrier (ratio 1 detune +4 with a fast-settling
+  index, and ratio 1.53 with a bright decaying edge); op 4 at ratio 1.53 sits
+  under op 3 quietly; ops 2 and 5 are silent. Attack rate 66 gives a soft
+  blown onset, and a pitch envelope dips a hair under the note at the start.
+  Intended use: a planet patch alongside the harp pluck, chosen per ensemble.
