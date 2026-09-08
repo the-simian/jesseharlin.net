@@ -16,7 +16,7 @@ import { decayCurve } from "./decay";
 import { midiToHz, pitchClass, snapToScale, soundingPitch } from "./pitch";
 import { createEmptyState } from "./presets";
 import { createSimulation, shadeAt, spreadAt } from "./simulation";
-import { depthOf } from "./tree";
+import { depthOf, timbreOf } from "./tree";
 import { type Body, type InstrumentState, LIMITS } from "./types";
 import { validateState } from "./validate";
 
@@ -534,4 +534,20 @@ test("spread runs from drawn in at periapsis to flung out at apoapsis and ignore
   ]);
   assert(Math.abs(near) < 1e-9 && Math.abs(far - 1) < 1e-9, `${near} ${far}`);
   assert(spreadAt(state, [{ id: sun.id, x: 0, y: 0 }]) === 0.5, "A lone sun sits at the middle.");
+});
+
+test("moons round one parent take bell, string, and voice in turn", () => {
+  let next = addBody(createEmptyState(), "sun");
+  const planet = next.bodies.at(-1);
+  assert(planet !== undefined);
+  for (let i = 0; i < 4; i++) next = addBody(next, planet.id);
+  const moons = next.bodies.filter((body) => body.parentId === planet.id);
+  assert(
+    moons.map((moon) => timbreOf(moon, next.bodies)).join() === "bell,string,vox,bell",
+    "Timbres cycle round the parent in the order the moons were added.",
+  );
+  // A moon of a moon starts its own count.
+  const grandchild = addBody(next, moons[1]?.id ?? "").bodies.at(-1);
+  assert(grandchild !== undefined);
+  assert(timbreOf(grandchild, [...next.bodies, grandchild]) === "bell");
 });

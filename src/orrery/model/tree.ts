@@ -15,3 +15,23 @@ export function depthOf(body: Body, byId: ReadonlyMap<BodyId, Body>): number {
   }
   return depth;
 }
+
+/** What a moon is made of: a bell (the metallophone), a plucked string, or a voice. */
+export type Timbre = "bell" | "string" | "vox";
+
+export const TIMBRES: readonly Timbre[] = ["bell", "string", "vox"];
+
+/**
+ * Moons round one parent take the timbres in turn, in the order they were
+ * added, so a ring of three sounds a bell, a string, and a voice. The sun and
+ * planets have their own sections and are always bells here; the caller casts
+ * them by depth first.
+ */
+export function timbreOf(body: Body, bodies: readonly Body[]): Timbre {
+  let ordinal = 0;
+  for (const other of bodies) {
+    if (other.id === body.id) break;
+    if (other.parentId === body.parentId) ordinal++;
+  }
+  return TIMBRES[ordinal % TIMBRES.length] ?? "bell";
+}

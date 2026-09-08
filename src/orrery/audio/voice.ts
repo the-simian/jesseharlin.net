@@ -6,7 +6,7 @@ import { sharedMix } from "../mix";
 import { createInitialState } from "../model/commands";
 import { decayCurve } from "../model/decay";
 import { midiToHz, soundingPitch } from "../model/pitch";
-import { depthOf } from "../model/tree";
+import { depthOf, type Timbre, timbreOf } from "../model/tree";
 import type { Contact, InstrumentState, ViewName } from "../model/types";
 import { validateState } from "../model/validate";
 
@@ -232,6 +232,109 @@ function bell(
   filter.Q.value = gong ? 1.2 : 0.5;
   return { oscillators: [carrier, modulator, hammer], nodes: [modulation, hammerGain, notch] };
 }
+/**
+ * A moon as a plucked string: a nylon string rather than the harp the planets
+ * play. The modulator sits on the fundamental so the partials are harmonic and
+ * the tone is round; its index is thrown high and settles fast, leaving a
+ * warm sustained body. The pick is a short metallic edge at the third partial.
+ * The string is pulled a little sharp by the pluck and settles in the first
+ * tenth of a second, as a real string does.
+ */
+function string(
+  { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
+  open: number,
+): Cast {
+  const carrier = context.createOscillator();
+  const modulator = context.createOscillator();
+  const pick = context.createOscillator();
+  const modulation = context.createGain();
+  const pickGain = context.createGain();
+  carrier.frequency.value = frequency;
+  carrier.detune.setValueAtTime(14 * velocity, start);
+  carrier.detune.linearRampToValueAtTime(0, start + 0.09);
+  modulator.frequency.value = frequency;
+  modulator.detune.setValueAtTime(14 * velocity, start);
+  modulator.detune.linearRampToValueAtTime(0, start + 0.09);
+  modulation.gain.setValueAtTime(frequency * (0.8 + 1.6 * velocity), start);
+  modulation.gain.exponentialRampToValueAtTime(frequency * 0.18, start + 0.15);
+  modulation.gain.exponentialRampToValueAtTime(frequency * 0.03, start + duration);
+  modulator.connect(modulation);
+  modulation.connect(carrier.frequency);
+  pick.type = "triangle";
+  pick.frequency.value = Math.min(frequency * 3.01, nyquist);
+  pickGain.gain.setValueAtTime(0, start);
+  pickGain.gain.linearRampToValueAtTime(0.22 * velocity, start + 0.002);
+  pickGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.035);
+  pick.connect(pickGain);
+  pickGain.connect(filter);
+  carrier.connect(envelope);
+  const peak = 0.85 * velocity;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(peak, start + 0.002);
+  envelope.gain.exponentialRampToValueAtTime(peak * 0.45, start + Math.min(duration * 0.4, 0.5));
+  filter.frequency.setValueAtTime(Math.min(nyquist, open * 1.1), start);
+  filter.frequency.exponentialRampToValueAtTime(
+    Math.max(220, frequency * 3),
+    start + Math.min(duration * 0.6, 0.8),
+  );
+  filter.Q.value = 0.9;
+  return { oscillators: [carrier, modulator, pick], nodes: [modulation, pickGain] };
+}
+
+/**
+ * A moon as a voice, after Yamaha's DX7 SpaceVox: a carrier on the fundamental
+ * fed by a modulator at the same ratio with feedback, which gives the vowel; a
+ * second carrier an octave up and a few cents wide that swells in late and
+ * beats slowly against the first; and a fixed high breath. Here the feedback
+ * stack is a sawtooth modulator at the fundamental, the vowel is set by a
+ * formant peak, and the breath is a whisper of the octave through the formant.
+ * It blooms rather than strikes, so it reads as sung.
+ */
+function vox(
+  { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
+  open: number,
+): Cast {
+  const carrier = context.createOscillator();
+  const modulator = context.createOscillator();
+  const octave = context.createOscillator();
+  const modulation = context.createGain();
+  const octaveGain = context.createGain();
+  const formant = context.createBiquadFilter();
+  carrier.frequency.value = frequency;
+  modulator.type = "sawtooth";
+  modulator.frequency.value = frequency;
+  const index = frequency * (0.35 + 0.45 * velocity);
+  modulation.gain.setValueAtTime(index * 0.4, start);
+  modulation.gain.linearRampToValueAtTime(index, start + 0.18);
+  modulation.gain.exponentialRampToValueAtTime(index * 0.5, start + duration);
+  modulator.connect(modulation);
+  modulation.connect(carrier.frequency);
+  // The octave: sharp by a fraction so it beats against the carrier's second
+  // partial, and late, as the patch's operator four swells under the first.
+  octave.frequency.value = Math.min(frequency * 2, nyquist);
+  octave.detune.value = 9;
+  octaveGain.gain.setValueAtTime(0, start);
+  octaveGain.gain.linearRampToValueAtTime(0.5 * velocity, start + Math.min(0.5, duration * 0.35));
+  octaveGain.gain.exponentialRampToValueAtTime(0.02, start + duration);
+  octave.connect(octaveGain);
+  // The vowel: a peak an octave and a half up the harmonic series, the "oo"
+  // to "oh" of a hummed note, brighter when struck harder.
+  formant.type = "peaking";
+  formant.frequency.value = Math.min(nyquist, Math.max(frequency * 2.5, 500 + 600 * velocity));
+  formant.Q.value = 2.5;
+  formant.gain.value = 9;
+  carrier.connect(formant);
+  octaveGain.connect(formant);
+  formant.connect(envelope);
+  const peak = 0.75 * velocity;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(peak, start + Math.min(0.12, duration * 0.2));
+  envelope.gain.setValueAtTime(peak, start + Math.max(0.12, Math.min(duration * 0.6, 1.2)));
+  filter.frequency.value = Math.min(nyquist, open * 0.9);
+  filter.Q.value = 0.5;
+  return { oscillators: [carrier, modulator, octave], nodes: [modulation, octaveGain, formant] };
+}
+
 export interface VoiceEngineOptions {
   onSuppressed?: (count: number) => void;
 }
@@ -592,9 +695,10 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
    * A body's patch follows its place in the tree, the way an ensemble is cast
    * by section: the sun is a pad (bowed, slow to bloom, held), planets are
    * plucks (a harp string: bright for an instant, then a plain ringing
-   * fundamental), and moons are bells (the metallophone: gongs when heavy and
-   * low, plinks when small or high). Every patch is three oscillators feeding one
-   * envelope and one lowpass, so the voice budget is the same whatever is cast.
+   * fundamental), and moons take their timbre in turn round their parent:
+   * bells (the metallophone: gongs when heavy and low, plinks when small or
+   * high), plucked strings, and voices. Every patch is three oscillators feeding
+   * one envelope and one lowpass, so the voice budget is the same whatever is cast.
    */
   function excite(
     midi: number,
@@ -605,6 +709,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     shade: number,
     weight = 0.5,
     role: Role = "moon",
+    timbre: Timbre = "bell",
   ) {
     if (!context || !bus) return;
     // The struck sun breathes longer than its mass alone would give it.
@@ -634,7 +739,11 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
         ? pad(patch, open * lit * (0.5 + 1.0 * (1 - spread)))
         : role === "planet"
           ? pluck(patch, open * lit)
-          : bell(patch, open * lit * (0.55 + 0.9 * spread), weight, midi);
+          : timbre === "string"
+            ? string(patch, open * lit * (0.55 + 0.9 * spread))
+            : timbre === "vox"
+              ? vox(patch, open * lit * (0.55 + 0.9 * spread))
+              : bell(patch, open * lit * (0.55 + 0.9 * spread), weight, midi);
     envelope.gain.exponentialRampToValueAtTime(0.00001, start + duration - 0.025);
     envelope.gain.linearRampToValueAtTime(0, start + duration);
     // Every tone darkens as it rings, the way a pedaled string loses its top first.
@@ -780,7 +889,18 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
         }
         const body = byId.get(id);
         const role = body ? roleOf(depthOf(body, byId)) : "moon";
-        excite(note.midi, note.velocity, view, start, duration, note.shade, note.weight, role);
+        const timbre = body ? timbreOf(body, state.bodies) : "bell";
+        excite(
+          note.midi,
+          note.velocity,
+          view,
+          start,
+          duration,
+          note.shade,
+          note.weight,
+          role,
+          timbre,
+        );
       }
     }
     // Retain only the deduplication window that can still be scheduled.

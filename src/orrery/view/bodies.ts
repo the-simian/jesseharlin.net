@@ -19,7 +19,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { MixStore } from "../mix";
 import { decayCurve } from "../model/decay";
 import { soundingPitch } from "../model/pitch";
-import { depthOf } from "../model/tree";
+import { depthOf, type Timbre, timbreOf } from "../model/tree";
 import type { Body, BodyId, BodyPosition, InstrumentState, ViewName } from "../model/types";
 import type { Dust } from "./dust";
 import type { Palette } from "./palette";
@@ -103,6 +103,12 @@ function bodyColor(palette: Palette, depth: number): Color3 {
   if (depth === 1) return palette.planet;
   return palette.moon;
 }
+
+/** The colour a moon leans toward for its timbre; bells keep the palette's own. */
+const TIMBRE_TINTS: Partial<Record<Timbre, Color3>> = {
+  string: new Color3(1, 0.72, 0.38),
+  vox: new Color3(0.68, 0.58, 1),
+};
 
 function glowColor(palette: Palette, depth: number): Color3 {
   if (depth === 0) return palette.sunGlow;
@@ -332,11 +338,19 @@ export function createBodies(options: BodiesOptions) {
     const pitchClass = ((midi % 12) + 12) % 12;
     const hueTurn = Color3.FromHSV((pitchClass / 12) * 360, 0.55, 1);
     const warmth = Color3.Lerp(palette.warm, palette.cool, register);
-    const light = Color3.Lerp(
+    let light = Color3.Lerp(
       rim,
       Color3.Lerp(warmth, hueTurn, 0.35),
       visual.depth === 0 ? 0.15 : 0.6,
     );
+    // A moon's colour says what it is made of: bells keep the palette, strings
+    // go to amber, voices to lavender.
+    if (visual.depth >= 2) {
+      const body = state.bodies.find((candidate) => candidate.id === id);
+      const timbre = body ? timbreOf(body, state.bodies) : "bell";
+      const cast = TIMBRE_TINTS[timbre];
+      if (cast) light = Color3.Lerp(light, cast, 0.45);
+    }
     visual.light = light;
     visual.register = register;
     visual.material.diffuseColor = base;
