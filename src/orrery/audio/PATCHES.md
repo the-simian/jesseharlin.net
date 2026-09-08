@@ -60,3 +60,15 @@ instrument's palette.
   decays as chiff, op 6 at ratio 4.62 with feedback modulates op 5. Transpose
   17. A pitch envelope scoops from a little under. The chiff and the late
   vibrato are the pan flute; it would suit either a slow moon or a planet.
+
+- **GLASSFLUTE** (`fe2c46e9f81f988f9cf7351604e363da5a500854`): an alternative
+  drone, moon, or planet. Algorithm 3 (two three-operator stacks), feedback 7,
+  sine LFO speed 34 delayed with no depth set. Carriers op 1 and op 4 both at
+  ratio 2 with slow attacks (rate 55) and long sustains; op 2 (ratio 1) and
+  op 3 (ratio 8, sustain falling to 50) modulate op 1 for the glass; op 5 is a
+  fixed high breath and op 6 at ratio 19 with feedback, velocity-sensitive and
+  falling to 15, gives the flute's edge on the onset. Held, it is a drone;
+  struck, a glassy flute.
+- **PANFLUTE3** (`0027d3ce2652b5d848c84b10b0a309d420e3694a`): the same
+  operators as PANFLUTE1, with the vibrato slower (LFO speed 27) and arriving
+  much later (delay 99). A moon or planet; the stiller of the two pan flutes.
