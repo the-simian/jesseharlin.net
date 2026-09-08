@@ -36,9 +36,11 @@ export function OrreryScreen() {
       }
       nameZone={
         <>
-          <h1 className="name">Jesse Harlin</h1>
+          <h1 className="name">
+            Jesse Harlin, <span className="name-alias">the_simian</span>
+          </h1>
           <p className="name-line">
-            engineer, composer (as <em>the_simian</em>), and installation artist. Norman, Oklahoma.
+            engineer, composer, and installation artist. Norman, Oklahoma.
           </p>
         </>
       }

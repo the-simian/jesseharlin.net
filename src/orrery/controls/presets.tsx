@@ -9,7 +9,6 @@ export function Presets({
   activeId: string | null;
   onPick: (id: string) => void;
 }) {
-  const active = presets.find((preset) => preset.id === activeId);
   return (
     <div className="presets">
       <fieldset className="presets-row">
@@ -27,9 +26,6 @@ export function Presets({
           </button>
         ))}
       </fieldset>
-      <p className="presets-caption" aria-live="polite">
-        {active?.caption ?? "Your own arrangement."}
-      </p>
     </div>
   );
 }

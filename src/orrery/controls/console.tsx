@@ -100,30 +100,36 @@ export function Console(props: ConsoleProps) {
           <span className="knob-glyph">−</span>
           <span className="knob-label">Remove</span>
         </button>
-        <label className="field field-inline">
-          <span className="field-label">
-            <small>
-              {props.bodyCount} of {LIMITS.maxBodies}
-            </small>
-          </span>
+      </div>
+      <fieldset className={`console-row console-editor${selected ? "" : " console-editor-empty"}`}>
+        <legend className="editor-legend">
+          <span
+            className="swatch"
+            style={{ background: selected ? swatchColor(patchOf(selected, props.bodies)) : "none" }}
+            aria-hidden="true"
+          />
           <span className="field-select">
             <select
               className="field-input"
+              aria-label="Body"
               value={selected?.id ?? ""}
               onChange={(event) => props.onSelect(event.target.value || null)}
             >
               <option value="">none selected</option>
               {props.bodies.map((body) => (
                 <option key={body.id} value={body.id}>
-                  {bodyName(body, props.bodies)}, {PATCH_NAMES[patchOf(body, props.bodies)]}
+                  {PATCH_NAMES[patchOf(body, props.bodies)]}, {bodyName(body, props.bodies)}
                 </option>
               ))}
             </select>
           </span>
-        </label>
-      </div>
-      {guidance}
-      {editor}
+          <small>
+            {props.bodyCount} of {LIMITS.maxBodies}
+          </small>
+          {guidance}
+        </legend>
+        {editor}
+      </fieldset>
     </div>
   );
 }
@@ -142,7 +148,7 @@ function Guidance({ bodies, soundOn }: { bodies: Body[]; soundOn: boolean }) {
     : !soundOn
       ? "Two bodies share a ring. Enable sound to hear them meet."
       : "Tap or click a body to change its ring, speed, or pitch. Lower the sun and everything follows.";
-  return <p className="console-hint">{text}</p>;
+  return <span className="editor-hint">{text}</span>;
 }
 
 function BodyEditor({
@@ -218,14 +224,8 @@ function BodyEditor({
       </span>
     </label>
   );
-  const sound = patchOf(body, bodies);
   return (
-    <fieldset className="console-row console-editor">
-      <legend className="editor-legend">
-        <span className="swatch" style={{ background: swatchColor(sound) }} aria-hidden="true" />
-        {PATCH_NAMES[sound]}
-        <small>{bodyName(body, bodies)}</small>
-      </legend>
+    <>
       {ring}
       {speed}
       <label className="field">
@@ -245,7 +245,7 @@ function BodyEditor({
         </span>
       </label>
       {drift}
-    </fieldset>
+    </>
   );
 }
 
