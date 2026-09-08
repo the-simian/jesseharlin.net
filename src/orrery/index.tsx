@@ -1,6 +1,9 @@
 import { Console } from "./controls/console";
 import { Flip } from "./controls/flip";
+import { Mixer } from "./controls/mixer";
+import { Presets } from "./controls/presets";
 import { OrreryLayout } from "./layout";
+import { sharedMix, useMix } from "./mix";
 import { useOrrery } from "./use-orrery";
 import { OrreryCanvas } from "./view/orrery-canvas";
 
@@ -14,6 +17,8 @@ const LINKS = [
 
 export function OrreryScreen() {
   const orrery = useOrrery();
+  const mixStore = sharedMix;
+  const mix = useMix(mixStore);
   return (
     <OrreryLayout
       view={orrery.state.activeView ?? "telescope"}
@@ -24,6 +29,7 @@ export function OrreryScreen() {
             runtime={orrery.runtime}
             reducedMotion={orrery.reducedMotion}
             onPick={orrery.pick}
+            mixStore={mixStore}
           />
         ) : null
       }
@@ -48,6 +54,14 @@ export function OrreryScreen() {
           onSound={orrery.toggleSound}
         />
       }
+      presetsZone={
+        <Presets
+          presets={orrery.presets}
+          activeId={orrery.activePresetId}
+          onPick={orrery.applyPreset}
+        />
+      }
+      mixerZone={<Mixer mix={mix} onLevel={mixStore.setLevel} />}
       consoleZone={
         <Console
           selected={orrery.selected}

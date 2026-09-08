@@ -5,20 +5,40 @@
  * Babylon and React surfaces that read it.
  *
  * Pitch accumulates in this model, not in the scene graph: a body's sounding
- * pitch is anchorMidi plus the sum of pitchOffsetSemitones along its ancestry.
+ * pitch is anchorMidi plus the sum of live local offsets along its ancestry.
  * The pool view uses anchorMidi minus that sum (the instrument's mirror rule).
  */
 
 export type BodyId = string;
 
-/** Orbital speed as a ratio of the base rate, so collision patterns are periodic. */
+/** Signed orbital speed relative to the base rate; negative numerators run backward. */
 export type Ratio = { numerator: number; denominator: number };
 
 export type Drift =
   | { mode: "still" }
   | {
+      mode: "struck";
+      target: "pitch";
+      /** Semitone displacements added to the local offset; start at steps[0], advance on parent strikes. */
+      steps: number[];
+    }
+  | {
+      mode: "sequence";
+      target: "pitch";
+      /** Equal-duration semitone displacements added to the local offset; may leave the scale. */
+      steps: number[];
+      periodSeconds: number;
+    }
+  | {
       mode: "stair" | "sine";
       target: "orbitRadius" | "speed";
+      amplitude: number;
+      periodSeconds: number;
+    }
+  | {
+      mode: "stair";
+      target: "pitch";
+      /** Maximum upward displacement in scale steps; cycle walks up, then down. */
       amplitude: number;
       periodSeconds: number;
     };
@@ -29,13 +49,27 @@ export interface Body {
   parentId: BodyId | null;
   /** Radius of the finite disc used for contact detection, in orrery units. */
   discRadius: number;
-  /** Distance from the parent's centre, in orrery units. 0 for the sun. */
+  /** Semi-major axis in orrery units. Sibling rings share this and eccentricity. */
   orbitRadius: number;
-  /** Starting angle. */
+  /** Ellipse eccentricity, from 0 (circle) to 0.9. */
+  eccentricity: number;
+  /** Orientation of periapsis in the orbital plane, in radians. */
+  periapsisRadians: number;
+  /** Starting mean anomaly, in radians. */
   phaseRadians: number;
   speedRatio: Ratio;
   /** Offset relative to the parent, in semitones. */
   pitchOffsetSemitones: number;
+  /** Exchange local authored offsets when both contacting bodies opt in. */
+  exchangesPitch: boolean;
+  /**
+   * Roots this body sets on its parent, one per strike, in order; the comet
+   * is a step sequencer. With several comets, the last strike wins. Only
+   * meaningful with strikesParent.
+   */
+  strikeSteps?: number[];
+  /** Permit parent strikes and contacts across rings along this body's path. */
+  strikesParent: boolean;
   drift: Drift;
 }
 
@@ -46,8 +80,10 @@ export interface InstrumentState {
   selectedBodyIds: BodyId[];
   /** Full turns per second for a body with speedRatio 1/1. */
   baseTurnsPerSecond: number;
-  /** MIDI note the sun sounds in the telescope view. */
+  /** MIDI anchor before the sun's live offset; also the pool reflection axis. */
   anchorMidi: number;
+  /** Sorted, unique semitone degrees within an octave, relative to the anchor. */
+  scale: readonly number[];
   soundEnabled: boolean;
   /** null when no view is on screen; simulation may idle. */
   activeView: ViewName | null;
@@ -55,8 +91,8 @@ export interface InstrumentState {
 }
 
 export const LIMITS = {
-  maxBodies: 8,
-  maxDepth: 2,
+  maxBodies: 24,
+  maxDepth: 3,
   allowedRatios: [
     { numerator: 1, denominator: 4 },
     { numerator: 1, denominator: 3 },
@@ -68,14 +104,14 @@ export const LIMITS = {
     { numerator: 3, denominator: 1 },
     { numerator: 4, denominator: 1 },
     { numerator: 5, denominator: 1 },
-  ] as readonly Ratio[],
+  ].flatMap((ratio) => [ratio, { ...ratio, numerator: -ratio.numerator }]) as readonly Ratio[],
   /**
    * Offsets the visitor may pick, in semitones. Fourths and fifths, both thirds,
    * whole and half steps, the minor seventh, and the octave: the intervals that
    * measured practice in Jesse's own tracks actually uses.
    */
   allowedOffsets: [
-    -12, -10, -7, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 7, 10, 12,
+    -12, -10, -8, -7, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 7, 8, 10, 12,
   ] as readonly number[],
 } as const;
 
@@ -95,12 +131,20 @@ export interface Contact {
   /** Sounding pitches in the telescope view; the pool mirrors them around anchorMidi. */
   pitchA: number;
   pitchB: number;
-  /** Relative closing speed at contact, 0 to 1, for velocity. */
+  /** Relative closing speed, 0 to 1; parent strikes receive intensity 1. */
   intensity: number;
+  /** Mean disc radius divided by the largest non-sun disc, capped at 1; parent strikes weigh 1. */
+  weight: number;
+  /** Raw relative closing speed, in orrery units per second. */
+  closing: number;
+  /** Sun occlusion at the contact midpoint, from 0 (lit) to 1 (covered). */
+  shade: number;
 }
 
 export interface SimulationFrame {
   time: number;
   positions: BodyPosition[];
   contacts: Contact[];
+  /** Live local offsets, including drift; pass directly to soundingPitch. */
+  pitchOffsets: Record<BodyId, number>;
 }

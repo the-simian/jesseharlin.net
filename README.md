@@ -2,16 +2,32 @@
 
 Jesse Harlin's personal site. The page is an instrument.
 
-Bodies orbit bodies at quantized speed ratios. The only sound is collision: when two
-discs touch, both ring, and every note exists because a visitor put something in the
-sky. Pitch offsets accumulate down the parent chain, so lowering the sun a fifth lowers
-everything. The flip control shows the same arrangement two ways. As above: the
-telescope looks down on an indigo sky with engraved orbit lines. So below: the pool
-looks up from underneath, on paper, in ink, with every interval inverted around the
-anchor. One simulation, two views.
+Bodies orbit bodies on Kepler ellipses at quantized speed ratios. The only sound is
+collision: when two discs touch, both ring. Pitch offsets accumulate down the parent
+chain and snap to the ensemble's scale, so a carrier planet transposes every moon it
+holds. The flip shows the same arrangement two ways. As above: the telescope looks down
+on a painted sky. So below: the pool looks up from under dark water, every interval
+inverted around the anchor. One simulation, two views.
 
-Nothing here is a composition. The instrument starts as a lone sun, and one body cannot
-collide with itself.
+## The rules that make it music
+
+- **Contact is the only sound.** Two bodies meet; both sound a note. Intensity comes from
+  closing speed, weight from disc size, and shade from whether another body stands between
+  the sun and the impact. Shade closes the filter, so a strike in shadow sounds covered.
+- **Contact is the only memory.** When two moons meet they trade pitch offsets. The notes
+  on a ring are conserved; who carries which permutes, so the same orbits stop producing
+  the same score.
+- **The comet is a step sequencer.** A body that strikes its parent sets the parent's root
+  to the next step of its own road. A comet on a long oval grazes the sun once a turn and
+  walks the ensemble through a chord progression; several comets can strike, and the last
+  one wins.
+- **Ovals cross.** Sibling rings share a semi-major axis and eccentricity but not an
+  orientation, so their paths intersect at uneven speeds. Retrograde bodies meet head-on.
+- **A body wears its note.** Register sets the colour temperature and the halo; a struck
+  body quivers for exactly as long as its note rings; trails are as long as the mix's ring.
+
+Voices are cast by role: heavy slow bodies are gongs, middle bodies are pedaled strings,
+small quick bodies are bright plinks, and the sun hums a drone an octave under its note.
 
 ## Stack
 
@@ -22,25 +38,47 @@ GitHub Pages from the `gh-pages` branch by the workflow in `.github/workflows/de
 bun install
 bun run dev      # http://localhost:5173
 bun run check    # biome + tsc
-bun test         # simulation and voice engine
+bun test         # simulation, presets, and voice engine
 bun run build    # dist/
 ```
 
+## Reading the music without ears
+
+```sh
+bun scripts/score.ts lily-pads 120            # telescope view, two minutes
+bun scripts/score.ts lily-pads 120 pool       # mirrored
+```
+
+The script runs the simulation offline, writes `scores/<id>-<view>.mid` (opens in
+Ableton), and prints a piano roll plus contacts per minute, gap histogram, dyad
+intervals, pitch classes per quarter, and the busiest bodies. Presets were composed
+against that roll.
+
 ## Layout
 
-- `src/orrery/model/`: the instrument's state, validation, pure commands, pitch, and the
-  fixed-step simulation with swept disc contacts. Pure TypeScript; tested with `bun test`.
-- `src/orrery/audio/`: the voice engine. Web Audio bell dyads scheduled against the
-  audio clock with a short lookahead; the pool view mirrors pitch and damps highs.
-- `src/orrery/view/`: the Babylon scene and its React wrapper. Two palettes, one scene.
-- `src/orrery/controls/`: the console and the flip, in plain language.
+- `src/orrery/model/`: state, validation, pure commands, pitch resolution, the presets,
+  and the fixed-step simulation with swept disc contacts. Pure TypeScript; `bun test`.
+- `src/orrery/audio/`: the voice engine. Web Audio voices scheduled against the audio
+  clock with a short lookahead, a synthetic convolution reverb, and the drone.
+- `src/orrery/view/`: the Babylon scene and its React wrapper. Painted plates, glow,
+  volumetric rays from the sun, halos, trails, and the drifting camera.
+- `src/orrery/controls/`: presets, the console, the flip, and the mixer, in plain words.
+- `src/orrery/mix.ts`: levels and ring time, remembered per visitor, read by audio and view.
 - `src/orrery/runtime.ts`: connects store, simulation, voice engine, and view. The picture
   runs a tenth of a second behind the audio so flashes land on notes.
-- `src/tower/`: a reading surface about Jesse, floors and books, reachable at `#tower`.
-  Content lives in `src/tower/floors/floors.ts`; adding a fact is adding a book.
+- `scripts/score.ts`: the offline renderer described above.
+- `src/tower/`: a parked reading surface about Jesse, reachable at `#tower`.
+
+## Composing a preset
+
+Add a builder in `src/orrery/model/presets.ts` and an entry in `PRESETS`. Carriers on
+their own rings never meet; their moons do. Put big slow discs on far rings for pedals and
+small fast ones near for ornaments; give a comet `strikesParent` and `strikeSteps` for a
+progression. Keep every offset in `LIMITS.allowedOffsets` and on the preset's scale, then
+render it with `scripts/score.ts` and read the roll before believing it.
 
 ## Updating what the site says about Jesse
 
-Edit `src/tower/floors/floors.ts`. A floor has a name, a caption, and books; a book has a
-title, a year, a kind, a paragraph, and one link. The instrument page's link list is in
-`src/orrery/index.tsx`.
+The link list is in `src/orrery/index.tsx`, the bio line beside the name in the same
+file, and the structured data in `index.html`. The tower's content lives in
+`src/tower/floors/floors.ts`; adding a fact is adding a book.

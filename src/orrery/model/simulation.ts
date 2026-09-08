@@ -1,4 +1,5 @@
-import { soundingPitch } from "./pitch";
+import { pitchOffsetAt, soundingPitch } from "./pitch";
+import { isPresetReplacement } from "./presets";
 import type { Body, BodyPosition, Contact, InstrumentState, SimulationFrame } from "./types";
 import { validateState } from "./validate";
 
@@ -41,12 +42,75 @@ function radiusAt(body: Body, time: number): number {
   );
 }
 
+/** Soft disc coverage of the finite segment from the sun to a contact midpoint. */
+export function shadeAt(
+  state: InstrumentState,
+  positions: BodyPosition[],
+  a: string,
+  b: string,
+): number {
+  const first = positions.find((position) => position.id === a);
+  const second = positions.find((position) => position.id === b);
+  if (!first || !second) return 0;
+  const x = (first.x + second.x) / 2;
+  const y = (first.y + second.y) / 2;
+  const lengthSquared = x * x + y * y;
+  if (lengthSquared === 0) return 0;
+  let light = 1;
+  for (const body of state.bodies) {
+    if (body.parentId === null || body.id === a || body.id === b) continue;
+    const position = positions.find((position) => position.id === body.id);
+    if (!position) continue;
+    const t = Math.max(0, Math.min(1, (position.x * x + position.y * y) / lengthSquared));
+    const distanceSquared = (position.x - t * x) ** 2 + (position.y - t * y) ** 2;
+    const coverage = Math.sqrt(Math.max(0, 1 - distanceSquared / body.discRadius ** 2));
+    light *= 1 - coverage;
+  }
+  return 1 - light;
+}
+
 export function createSimulation(initial: InstrumentState) {
   if (!validateState(initial).ok) throw new Error("Invalid initial arrangement.");
   let state = initial;
   let time = 0;
+  let pitchEpoch = 0;
   let remainder = 0;
   let phases = new Map(state.bodies.map((body) => [body.id, body.phaseRadians]));
+  let offsets = new Map(state.bodies.map((body) => [body.id, body.pitchOffsetSemitones]));
+  let strikes = new Map<string, number>();
+  /** A parent's root as set by the last comet to strike it; overrides its timed drift. */
+  let struckRoots = new Map<string, number>();
+  function liveOffsets(at: number): Record<string, number> {
+    return Object.fromEntries(
+      state.bodies.map((body) => {
+        const base = offsets.get(body.id) ?? body.pitchOffsetSemitones;
+        const drift = body.drift;
+        if (drift.mode === "struck" || drift.mode === "sequence") {
+          const timed =
+            drift.mode === "sequence"
+              ? Math.floor(
+                  (((((at - pitchEpoch) / drift.periodSeconds) % 1) + 1) % 1) * drift.steps.length,
+                )
+              : 0;
+          const set = struckRoots.get(body.id);
+          return [
+            body.id,
+            set !== undefined
+              ? base + set
+              : base +
+                (drift.steps[(timed + (strikes.get(body.id) ?? 0)) % drift.steps.length] ?? 0),
+          ];
+        }
+        const root = struckRoots.get(body.id);
+        if (root !== undefined) return [body.id, base + root];
+        return [
+          body.id,
+          pitchOffsetAt(state, { ...body, pitchOffsetSemitones: base }, at - pitchEpoch),
+        ];
+      }),
+    );
+  }
+
   let touching = new Set<string>();
   const angleAt = (body: Body, at: number) =>
     (phases.get(body.id) ?? body.phaseRadians) + angularTravel(body, state, at);
@@ -59,12 +123,22 @@ export function createSimulation(initial: InstrumentState) {
       if (existing) return existing;
       const parent = body.parentId === null ? undefined : byId.get(body.parentId);
       const origin = parent ? position(parent) : { x: 0, y: 0 };
-      const angle = angleAt(body, at);
+      const mean = ((angleAt(body, at) % TAU) + TAU) % TAU;
+      // Newton on Kepler's equation; the sine seed keeps high eccentricities converging.
+      let eccentric = mean + body.eccentricity * Math.sin(mean);
+      for (let iteration = 0; iteration < 14; iteration++)
+        eccentric -=
+          (eccentric - body.eccentricity * Math.sin(eccentric) - mean) /
+          (1 - body.eccentricity * Math.cos(eccentric));
       const radius = parent ? radiusAt(body, at) : 0;
+      const x = radius * (Math.cos(eccentric) - body.eccentricity);
+      const y = radius * Math.sqrt(1 - body.eccentricity ** 2) * Math.sin(eccentric);
+      const cos = Math.cos(body.periapsisRadians);
+      const sin = Math.sin(body.periapsisRadians);
       const value = {
         id: body.id,
-        x: origin.x + Math.cos(angle) * radius,
-        y: origin.y + Math.sin(angle) * radius,
+        x: origin.x + cos * x - sin * y,
+        y: origin.y + sin * x + cos * y,
       };
       cache.set(body.id, value);
       return value;
@@ -73,19 +147,50 @@ export function createSimulation(initial: InstrumentState) {
   }
   function setState(next: InstrumentState) {
     if (!validateState(next).ok) return;
+    const restart = isPresetReplacement(state, next);
     const oldBodies = new Map(state.bodies.map((body) => [body.id, body]));
     const nextPhases = new Map<string, number>();
     for (const body of next.bodies) {
-      const old = oldBodies.get(body.id);
+      const old = restart ? undefined : oldBodies.get(body.id);
       // An explicit phase edit rotates the current orbit by the edited delta.
       const angle = old
         ? angleAt(old, time) + body.phaseRadians - old.phaseRadians
         : body.phaseRadians;
       nextPhases.set(body.id, angle - angularTravel(body, next, time));
     }
+    offsets = new Map(
+      next.bodies.map((body) => {
+        const old = oldBodies.get(body.id);
+        return [
+          body.id,
+          !restart && old?.pitchOffsetSemitones === body.pitchOffsetSemitones
+            ? (offsets.get(body.id) ?? body.pitchOffsetSemitones)
+            : body.pitchOffsetSemitones,
+        ];
+      }),
+    );
+    strikes = new Map(
+      next.bodies.map((body) => {
+        const old = oldBodies.get(body.id);
+        const same =
+          !restart &&
+          JSON.stringify(old?.drift) === JSON.stringify(body.drift) &&
+          JSON.stringify(old?.strikeSteps) === JSON.stringify(body.strikeSteps);
+        return [body.id, same ? (strikes.get(body.id) ?? 0) : 0];
+      }),
+    );
+    if (restart) struckRoots = new Map();
+    else
+      struckRoots = new Map(
+        [...struckRoots].filter(([id]) => next.bodies.some((body) => body.id === id)),
+      );
     state = next;
     phases = nextPhases;
     const ids = new Set(next.bodies.map((body) => body.id));
+    if (restart) {
+      touching.clear();
+      pitchEpoch = time;
+    }
     touching = new Set(
       [...touching].filter((key) => (JSON.parse(key) as string[]).every((id) => ids.has(id))),
     );
@@ -101,11 +206,12 @@ export function createSimulation(initial: InstrumentState) {
       const radial = drift.mode !== "still" && drift.target === "orbitRadius";
       const speedDrift = drift.mode !== "still" && drift.target === "speed";
       speed +=
-        ((TAU * state.baseTurnsPerSecond * body.speedRatio.numerator) /
+        ((TAU * state.baseTurnsPerSecond * Math.abs(body.speedRatio.numerator)) /
           body.speedRatio.denominator) *
         (body.orbitRadius + (radial ? drift.amplitude : 0)) *
-        (1 + (speedDrift ? drift.amplitude : 0));
-      if (radial) speed += (TAU * drift.amplitude) / drift.periodSeconds;
+        (1 + (speedDrift ? drift.amplitude : 0)) *
+        Math.sqrt((1 + body.eccentricity) / (1 - body.eccentricity));
+      if (radial) speed += (TAU * drift.amplitude * (1 + body.eccentricity)) / drift.periodSeconds;
     }
     return Math.min(FIXED_STEP_SECONDS, speed > 0 ? radius / (2 * speed) : FIXED_STEP_SECONDS);
   }
@@ -120,8 +226,19 @@ export function createSimulation(initial: InstrumentState) {
         const a1 = end[i];
         const b1 = end[j];
         if (!a || !b || !a0 || !b0 || !a1 || !b1) continue;
-        // Parent and child form one orbital assembly; their own contact is not an excitation.
-        if (a.parentId === b.id || b.parentId === a.id) continue;
+        // A ring shares parent, semi-major axis, and eccentricity. Rotated ovals
+        // cross at different anomalies; Kepler speed makes their encounters uneven.
+        // Nested motion draws spirographs, while rational mean rates stay periodic.
+        const parentPair = a.parentId === b.id || b.parentId === a.id;
+        const parentStrike =
+          (a.parentId === b.id && a.strikesParent) || (b.parentId === a.id && b.strikesParent);
+        const sameRing =
+          a.parentId !== null &&
+          a.parentId === b.parentId &&
+          a.orbitRadius === b.orbitRadius &&
+          a.eccentricity === b.eccentricity;
+        if (parentPair ? !parentStrike : !sameRing && !a.strikesParent && !b.strikesParent)
+          continue;
         const key = JSON.stringify([a.id, b.id].sort());
         const x = a0.x - b0.x;
         const y = a0.y - b0.y;
@@ -144,13 +261,56 @@ export function createSimulation(initial: InstrumentState) {
             time: at + entry * dt,
             a: a.id,
             b: b.id,
-            pitchA: soundingPitch(state, a.id, "telescope"),
-            pitchB: soundingPitch(state, b.id, "telescope"),
-            intensity: Math.min(1, closing / 4),
+            pitchA: 0,
+            pitchB: 0,
+            intensity: parentStrike ? 1 : Math.min(1, closing / 4),
+            closing,
+            shade: shadeAt(state, positionsAt(at + entry * dt), a.id, b.id),
+            weight: parentStrike
+              ? 1
+              : Math.min(
+                  1,
+                  (a.discRadius + b.discRadius) /
+                    (2 *
+                      Math.max(
+                        ...state.bodies
+                          .filter((body) => body.parentId !== null)
+                          .map((body) => body.discRadius),
+                      )),
+                ),
           });
         }
         if ((x + dx) ** 2 + (y + dy) ** 2 < radius * radius) touching.add(key);
         else touching.delete(key);
+      }
+    }
+    contacts.sort((a, b) => a.time - b.time || a.a.localeCompare(b.a) || a.b.localeCompare(b.b));
+    for (const contact of contacts) {
+      const a = state.bodies.find((body) => body.id === contact.a);
+      const b = state.bodies.find((body) => body.id === contact.b);
+      if (!a || !b) continue;
+      const parent =
+        a.parentId === b.id && a.strikesParent
+          ? b
+          : b.parentId === a.id && b.strikesParent
+            ? a
+            : undefined;
+      const striker = parent ? (parent === a ? b : a) : undefined;
+      if (parent && striker?.strikeSteps?.length) {
+        // The comet is a step sequencer: each strike sets its parent's root to the
+        // comet's next step. With several comets, the last to strike wins.
+        const index = strikes.get(striker.id) ?? 0;
+        struckRoots.set(parent.id, striker.strikeSteps[index % striker.strikeSteps.length] ?? 0);
+        strikes.set(striker.id, index + 1);
+      } else if (parent && (parent.drift.mode === "struck" || parent.drift.mode === "sequence"))
+        strikes.set(parent.id, (strikes.get(parent.id) ?? 0) + 1);
+      const live = liveOffsets(contact.time);
+      contact.pitchA = soundingPitch(state, a.id, "telescope", contact.time - pitchEpoch, live);
+      contact.pitchB = soundingPitch(state, b.id, "telescope", contact.time - pitchEpoch, live);
+      if (a.exchangesPitch && b.exchangesPitch) {
+        const first = offsets.get(a.id) ?? a.pitchOffsetSemitones;
+        offsets.set(a.id, offsets.get(b.id) ?? b.pitchOffsetSemitones);
+        offsets.set(b.id, first);
       }
     }
     return contacts;
@@ -174,7 +334,7 @@ export function createSimulation(initial: InstrumentState) {
         time = nextTime;
         positions = next;
       }
-      frames.push({ time, positions, contacts });
+      frames.push({ time, positions, contacts, pitchOffsets: liveOffsets(time) });
       remainder = Math.max(0, remainder - FIXED_STEP_SECONDS);
     }
     return frames;

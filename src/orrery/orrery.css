@@ -12,10 +12,24 @@
 }
 
 .orrery[data-view="pool"] {
-  color: var(--ink);
-  --ui-fg: var(--ink);
-  --ui-bg: rgba(239, 230, 211, 0.7);
-  --ui-line: rgba(35, 33, 29, 0.4);
+  --ui-fg: #d6efe9;
+  --ui-bg: rgba(5, 12, 14, 0.55);
+  --ui-line: rgba(159, 214, 207, 0.35);
+  color: var(--ui-fg);
+}
+
+/* a dark veil under the controls so type reads over the painted sky */
+.orrery-veil {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42vh;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(11, 10, 18, 0), rgba(11, 10, 18, 0.82));
+}
+
+.orrery-name,
+.orrery-links {
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7);
 }
 
 .orrery-sky,
@@ -119,13 +133,74 @@
   position: absolute;
   left: clamp(1rem, 3vw, 2.5rem);
   bottom: clamp(1rem, 3vw, 2.5rem);
-  max-width: min(44rem, calc(100vw - 2rem));
+  max-width: min(46rem, calc(100vw - 2rem));
 }
 
 .console {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* ensembles: where a visitor starts */
+
+.orrery-presets {
+  margin-bottom: 0.9rem;
+}
+
+.presets-row {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.presets-legend {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.7;
+  padding: 0;
+  margin-bottom: 0.3rem;
+  width: 100%;
+}
+
+.presets-row {
+  gap: 0.3rem;
+}
+
+.preset {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--ui-fg);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-line);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  min-height: 2.1rem;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+.preset[aria-pressed="true"] {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: var(--ink);
+}
+
+.preset:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.presets-caption {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  opacity: 0.85;
+  max-width: 34rem;
+  line-height: 1.5;
 }
 
 .console-row {
@@ -230,6 +305,78 @@
   border-color: var(--brass);
 }
 
+/* the mix: four sliders under the flip */
+
+.orrery-mixer {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.mixer {
+  margin: 0;
+  padding: 0 0.9rem;
+  border: 1px solid var(--ui-line);
+  border-radius: 1.25rem;
+  background: var(--ui-bg);
+  backdrop-filter: blur(6px);
+  min-width: 17rem;
+}
+
+.mixer[open] {
+  padding-bottom: 0.7rem;
+}
+
+.mixer-summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+}
+
+.mixer-summary::-webkit-details-marker {
+  display: none;
+}
+
+.mixer-summary::after {
+  content: "+";
+  margin-left: auto;
+  font-size: 1rem;
+}
+
+.mixer[open] .mixer-summary::after {
+  content: "−";
+}
+
+.mixer-field {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+}
+
+.mixer-field + .mixer-field {
+  margin-top: 0.35rem;
+}
+
+.mixer-label small {
+  display: block;
+  font-size: 0.65rem;
+  opacity: 0.65;
+}
+
+.mixer-input {
+  width: 100%;
+  accent-color: var(--brass);
+  min-height: 1.6rem;
+  cursor: pointer;
+}
+
 /* segmented flip */
 
 .visually-hidden {
@@ -272,7 +419,7 @@ fieldset.segmented {
 }
 
 .orrery[data-view="pool"] .segment[aria-pressed="true"] {
-  color: var(--paper);
+  color: #050c0e;
 }
 
 .segment:focus-visible {
@@ -303,11 +450,23 @@ fieldset.segmented {
   font: inherit;
   font-size: 0.85rem;
   color: var(--ui-fg);
-  background: transparent;
+  color-scheme: dark;
+  background: var(--ui-bg);
   border: 1px solid var(--ui-line);
-  border-radius: 0.35rem;
-  padding: 0.45rem 0.6rem;
+  border-radius: 999px;
+  padding: 0.45rem 2rem 0.45rem 0.9rem;
   min-height: 2.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23efe6d3' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  cursor: pointer;
+}
+
+.field-input option {
+  background: var(--sky);
+  color: var(--paper);
 }
 
 .field-input:focus-visible {
@@ -326,7 +485,10 @@ fieldset.segmented {
     padding-bottom: env(safe-area-inset-bottom);
   }
   .orrery[data-view="pool"] {
-    background: var(--paper);
+    background: #050c0e;
+  }
+  .orrery-veil {
+    display: none;
   }
   .orrery-sky {
     position: relative;
@@ -359,6 +521,9 @@ fieldset.segmented {
   }
   .flip {
     align-items: stretch;
+  }
+  .mixer {
+    min-width: 0;
   }
   .flip-note {
     text-align: left;

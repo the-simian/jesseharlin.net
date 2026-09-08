@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   addBody,
+  applyPreset,
   clearSelection,
   removeBody,
   selectBody,
@@ -11,7 +12,15 @@ import {
   setRatio,
   setSoundEnabled,
 } from "./model/commands";
-import type { Body, Drift, InstrumentState, Ratio, ViewName } from "./model/types";
+import { getPresetId, PRESETS } from "./model/presets";
+import {
+  type Body,
+  type Drift,
+  type InstrumentState,
+  LIMITS,
+  type Ratio,
+  type ViewName,
+} from "./model/types";
 import { createOrreryRuntime, type OrreryRuntime } from "./runtime";
 import { createOrreryStore, type OrreryStore, useOrreryState } from "./store";
 
@@ -40,11 +49,10 @@ export function useOrrery() {
   const selectedId = state.selectedBodyIds[0] ?? null;
   const selected = state.bodies.find((body) => body.id === selectedId) ?? null;
   const sun = state.bodies.find((body) => body.parentId === null) as Body;
-  // Two ways to add: a planet always circles the sun; a moon circles the selected planet
-  // (or, when a moon is selected, that moon's planet, since moons cannot have moons).
+  // Add around the selection, or its parent when the depth limit is reached.
   const moonTarget =
     selected && selected.parentId !== null ? resolveAddTarget(selected, state) : null;
-  const room = state.bodies.length < 8;
+  const room = state.bodies.length < LIMITS.maxBodies;
   const canAddPlanet = room;
   const canAddMoon = room && moonTarget !== null;
 
@@ -58,6 +66,11 @@ export function useOrrery() {
     canAddPlanet,
     canAddMoon,
     moonTarget,
+    presets: PRESETS,
+    activePresetId: getPresetId(state),
+    applyPreset(id: string) {
+      store.dispatch((s) => applyPreset(s, id));
+    },
     pick(id: string | null) {
       store.dispatch((s) => (id === null ? clearSelection(s) : selectBody(s, id)));
     },
@@ -106,7 +119,7 @@ function addAndSelect(state: InstrumentState, parentId: string): InstrumentState
 }
 
 function resolveAddTarget(body: Body, state: InstrumentState): Body {
-  if (depthOf(body, state) < 2) return body;
+  if (depthOf(body, state) < LIMITS.maxDepth) return body;
   const parent = state.bodies.find((candidate) => candidate.id === body.parentId);
   return parent ?? body;
 }

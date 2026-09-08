@@ -1,4 +1,5 @@
 import { createVoiceEngine } from "./audio/voice";
+import { pitchOffsetAt } from "./model/pitch";
 import { createSimulation } from "./model/simulation";
 import type { BodyPosition, Contact, InstrumentState } from "./model/types";
 import type { OrreryStore } from "./store";
@@ -12,9 +13,11 @@ export type RenderFrame = {
   positions: BodyPosition[];
   /** Contacts whose time has just passed in the delayed timeline. */
   contacts: Contact[];
+  /** Local offsets at the same delayed time as positions, including exchange and drift. */
+  pitchOffsets: Record<string, number>;
 };
 
-type Snapshot = { time: number; positions: BodyPosition[] };
+type Snapshot = { time: number; positions: BodyPosition[]; pitchOffsets: Record<string, number> };
 
 /**
  * Owns the simulation clock and the voice engine, forwards store changes to
@@ -35,7 +38,15 @@ export function createOrreryRuntime(store: OrreryStore) {
   });
   let simulationTime = 0;
   let pendingContacts: Contact[] = [];
-  let snapshots: Snapshot[] = [{ time: 0, positions: simulation.positionsAt(0) }];
+  let snapshots: Snapshot[] = [
+    {
+      time: 0,
+      positions: simulation.positionsAt(0),
+      pitchOffsets: Object.fromEntries(
+        store.getState().bodies.map((body) => [body.id, pitchOffsetAt(store.getState(), body, 0)]),
+      ),
+    },
+  ];
 
   const unsubscribe = store.subscribe(() => {
     const state = store.getState();
@@ -63,8 +74,10 @@ export function createOrreryRuntime(store: OrreryStore) {
     for (const frame of frames) {
       simulationTime = frame.time;
       fresh.push(...frame.contacts);
-      snapshots.push({ time: frame.time, positions: frame.positions });
+      snapshots.push(frame);
     }
+    const latest = frames.at(-1);
+    if (latest) voice.updateFrame(latest.pitchOffsets, latest.time, fresh);
     if (state.soundEnabled && state.activeView) {
       voice.scheduleContacts(fresh, state.activeView, simulationTime);
     }
@@ -79,7 +92,12 @@ export function createOrreryRuntime(store: OrreryStore) {
       else break;
     }
     snapshots = snapshots.slice(keepFrom);
-    return { time: shown, positions: delayedPositions(shown), contacts: due };
+    return {
+      time: shown,
+      positions: delayedPositions(shown),
+      contacts: due,
+      pitchOffsets: snapshots[0]?.pitchOffsets ?? {},
+    };
   }
 
   return {

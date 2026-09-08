@@ -1,3 +1,4 @@
+import { PRESETS } from "./presets";
 import type { Body, BodyId, Drift, InstrumentState, Ratio, ViewName } from "./types";
 import { validateState } from "./validate";
 
@@ -12,26 +13,19 @@ function edit(state: InstrumentState, id: BodyId, patch: Partial<Body>): Instrum
   });
 }
 export function createInitialState(): InstrumentState {
-  return {
-    bodies: [
-      {
-        id: "sun",
-        parentId: null,
-        discRadius: 0.35,
-        orbitRadius: 0,
-        phaseRadians: 0,
-        speedRatio: { numerator: 1, denominator: 1 },
-        pitchOffsetSemitones: 0,
-        drift: { mode: "still" },
-      },
-    ],
-    selectedBodyIds: [],
-    anchorMidi: 58,
-    baseTurnsPerSecond: 0.25,
-    maxVoices: 6,
-    soundEnabled: false,
-    activeView: null,
-  };
+  const first = PRESETS[0];
+  if (!first) throw new Error("A default ensemble is required.");
+  return first.build();
+}
+
+export function applyPreset(state: InstrumentState, presetId: string): InstrumentState {
+  const preset = PRESETS.find((candidate) => candidate.id === presetId);
+  if (!preset) return state;
+  return accept(state, {
+    ...preset.build(),
+    soundEnabled: state.soundEnabled,
+    activeView: state.activeView,
+  });
 }
 /** Speed ratios handed to successive siblings on one ring, so they lap each other and meet. */
 const SIBLING_RATIOS: Ratio[] = [
@@ -73,9 +67,13 @@ export function addBody(state: InstrumentState, parentId: BodyId): InstrumentSta
         parentId,
         discRadius,
         orbitRadius,
+        eccentricity: 0,
+        periapsisRadians: 0,
         phaseRadians: (siblings.length * Math.PI * (3 - Math.sqrt(5))) % (2 * Math.PI),
         speedRatio: { ...(ratio as Ratio) },
         pitchOffsetSemitones: 0,
+        exchangesPitch: parent.parentId !== null,
+        strikesParent: false,
         drift: { mode: "still" },
       },
     ],
@@ -101,7 +99,12 @@ export const setRatio = (state: InstrumentState, id: BodyId, speedRatio: Ratio) 
 export const setOffset = (state: InstrumentState, id: BodyId, pitchOffsetSemitones: number) =>
   edit(state, id, { pitchOffsetSemitones });
 export const setDrift = (state: InstrumentState, id: BodyId, drift: Drift) =>
-  edit(state, id, { drift: { ...drift } });
+  edit(state, id, {
+    drift:
+      drift.mode === "sequence" || drift.mode === "struck"
+        ? { ...drift, steps: [...drift.steps] }
+        : { ...drift },
+  });
 export const setPhase = (state: InstrumentState, id: BodyId, phaseRadians: number) =>
   edit(state, id, { phaseRadians });
 export const setOrbitRadius = (state: InstrumentState, id: BodyId, orbitRadius: number) =>
