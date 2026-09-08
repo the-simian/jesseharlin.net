@@ -13,6 +13,30 @@ patch has a JSON form at `https://patches.fm/patches/dx7/<first two hex>/<signat
   -6, +5 (fine 1), and -5, modulators at ratios 1, 2, and 2 with sustained
   indices, slow attack, pitch scoop from below.
 
+- **Spacechime** by Tim Conrardy (`9c922812e8981cec78100e73fbdf07a70b20d6cd`):
+  the moons' second timbre, the chime. Algorithm 30, feedback 3. Op 1 at ratio
+  0.5 (level-scaled down in the bass) and op 2 at ratio 2 are plain sines an
+  octave pair apart; op 6 at ratio 7.08 with feedback is the glass; op 3 at
+  ratio 20, modulated by a blip from op 4 and a rising op 5, climbs over
+  minutes and is left out here. Triangle LFO speed 25 delayed 46 with pitch
+  depth 8 (a late vibrato), transpose 24.
+
+- **SpaceHarps** by Tim Conrardy (`fd294c73d7ce7bd38de55dabebdb962a511aafd2`):
+  the planets' patch. Algorithm 18, feedback 7: one carrier at ratio 1 with
+  three branches on it. Op 4 at ratio 2 (velocity 6) strikes and decays, the
+  pluck, fed by op 5 (ratio 2) and a blip from op 6 (ratio 26); op 2 at ratio
+  3 detune -6 swells in (attack rate 32) and holds, the bloom; op 3 at ratio 4
+  with feedback dips and rises. Square LFO speed 23 delayed 60 with pitch depth
+  8, a late trill. Here: carrier, striking ratio-2 modulator, swelling ratio-3
+  modulator.
+- **DeepSpace** by Tim Conrardy (`6f8cda77aecd778f2774af6161dbe55a6345b4a9`):
+  the moons' first timbre. Algorithm 26, no feedback, transpose 0. Op 1 at
+  ratio 4 detune -2 arrives slowly; op 2 at ratio 4.36 arrives at once and
+  fades, modulated by op 3 at ratio 0.785; op 4 at ratio 0.595 sits under them,
+  modulated by op 5 at ratio 15.15 and by op 6 fixed at 10 Hz, a flutter. Sine
+  LFO speed 19 delayed 24 with light pitch and amplitude depth. Here the pair
+  is at the note and nine percent above, with the low carrier at half the note.
+
 ## Queued
 
 - **JX3P STRGS** (`f9b4312c8202441109c4e142b2e4ee708193a42e`): an alternative

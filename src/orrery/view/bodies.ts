@@ -104,8 +104,9 @@ function bodyColor(palette: Palette, depth: number): Color3 {
   return palette.moon;
 }
 
-/** The colour a moon leans toward for its timbre; bells keep the palette's own. */
+/** The colour a moon leans toward for its timbre; deep space keeps the palette's own. */
 const TIMBRE_TINTS: Partial<Record<Timbre, Color3>> = {
+  chime: new Color3(0.85, 0.96, 1),
   string: new Color3(1, 0.72, 0.38),
   vox: new Color3(0.68, 0.58, 1),
 };
@@ -345,11 +346,11 @@ export function createBodies(options: BodiesOptions) {
       Color3.Lerp(warmth, hueTurn, 0.35),
       visual.depth === 0 ? 0.15 : 0.6,
     );
-    // A moon's colour says what it is made of: bells keep the palette, strings
-    // go to amber, voices to lavender.
+    // A moon's colour says what it is made of: deep space keeps the palette,
+    // chimes go icy, strings to amber, voices to lavender.
     if (visual.depth >= 2) {
       const body = state.bodies.find((candidate) => candidate.id === id);
-      const timbre = body ? timbreOf(body, state.bodies) : "bell";
+      const timbre = body ? timbreOf(body, state.bodies) : "deep";
       const cast = TIMBRE_TINTS[timbre];
       if (cast) light = Color3.Lerp(light, cast, 0.45);
     }

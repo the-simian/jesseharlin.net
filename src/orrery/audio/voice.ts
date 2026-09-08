@@ -194,44 +194,48 @@ function pad(
 }
 
 /**
- * A planet as a harp string: a sine carrier, a harmonic partial that flashes
- * and is gone in a few hundredths of a second, and a pick click, then the
- * fundamental rings plainly and closes fast.
+ * A planet as a harp, after Tim Conrardy's DX7 SpaceHarps: one carrier on the
+ * fundamental with three modulators on it. A ratio-2 modulator strikes and
+ * decays, the pluck; a ratio-3 modulator six cents flat swells in over the
+ * first half second and holds, so the note blooms after it is struck; the
+ * patch's ratio-4 feedback branch and its high blip are folded into the pick.
  */
 function pluck(
   { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
   open: number,
 ): Cast {
   const carrier = context.createOscillator();
-  const modulator = context.createOscillator();
-  const pick = context.createOscillator();
-  const modulation = context.createGain();
-  const pickGain = context.createGain();
+  const strike = context.createOscillator();
+  const bloom = context.createOscillator();
+  const strikeIndex = context.createGain();
+  const bloomIndex = context.createGain();
   carrier.frequency.value = frequency;
-  modulator.frequency.value = Math.min(frequency * 2, nyquist);
-  modulation.gain.setValueAtTime(frequency * (0.4 + 1.4 * velocity), start);
-  modulation.gain.exponentialRampToValueAtTime(frequency * 0.02, start + 0.06);
-  modulation.gain.exponentialRampToValueAtTime(0.001, start + Math.min(duration, 0.6));
-  modulator.connect(modulation);
-  modulation.connect(carrier.frequency);
-  pick.frequency.value = Math.min(frequency * 5, nyquist);
-  pickGain.gain.setValueAtTime(0, start);
-  pickGain.gain.linearRampToValueAtTime(0.3 * velocity, start + 0.002);
-  pickGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.02);
-  pick.connect(pickGain);
-  pickGain.connect(filter);
+  strike.frequency.value = Math.min(frequency * 2, nyquist);
+  strikeIndex.gain.setValueAtTime(frequency * (0.6 + 1.6 * velocity), start);
+  strikeIndex.gain.exponentialRampToValueAtTime(frequency * 0.25, start + 0.12);
+  strikeIndex.gain.exponentialRampToValueAtTime(frequency * 0.08, start + Math.min(duration, 1.2));
+  strike.connect(strikeIndex);
+  strikeIndex.connect(carrier.frequency);
+  bloom.frequency.value = Math.min(frequency * 3, nyquist);
+  bloom.detune.value = -6;
+  const swell = Math.min(0.55, duration * 0.35);
+  bloomIndex.gain.setValueAtTime(frequency * 0.05, start);
+  bloomIndex.gain.linearRampToValueAtTime(frequency * (0.45 + 0.35 * velocity), start + swell);
+  bloomIndex.gain.exponentialRampToValueAtTime(frequency * 0.12, start + duration);
+  bloom.connect(bloomIndex);
+  bloomIndex.connect(carrier.frequency);
   carrier.connect(envelope);
-  const peak = 0.9 * velocity;
+  const peak = 0.85 * velocity;
   envelope.gain.setValueAtTime(0, start);
-  envelope.gain.linearRampToValueAtTime(peak, start + 0.0015);
-  envelope.gain.exponentialRampToValueAtTime(peak * 0.35, start + Math.min(duration * 0.5, 0.3));
+  envelope.gain.linearRampToValueAtTime(peak, start + 0.004);
+  envelope.gain.exponentialRampToValueAtTime(peak * 0.6, start + Math.min(duration * 0.4, 0.6));
   filter.frequency.setValueAtTime(Math.min(nyquist, open * 1.3), start);
   filter.frequency.exponentialRampToValueAtTime(
-    Math.max(200, frequency * 2.5),
-    start + Math.min(duration * 0.5, 0.45),
+    Math.max(300, frequency * 4),
+    start + Math.min(duration * 0.7, 1.5),
   );
-  filter.Q.value = 0.7;
-  return { oscillators: [carrier, modulator, pick], nodes: [modulation, pickGain] };
+  filter.Q.value = 0.6;
+  return { oscillators: [carrier, strike, bloom], nodes: [strikeIndex, bloomIndex] };
 }
 
 /**
@@ -388,6 +392,98 @@ function vox(
   filter.frequency.value = Math.min(nyquist, open * 0.9);
   filter.Q.value = 0.5;
   return { oscillators: [carrier, modulator, octave], nodes: [modulation, octaveGain, formant] };
+}
+
+/**
+ * A moon as a chime, after Tim Conrardy's DX7 Spacechime: a sine on the
+ * fundamental that comes in a little late and is held back in the bass, a sine
+ * two octaves up that answers the strike, and a carrier with light feedback at
+ * an inharmonic 14.16 times the fundamental, the glass of the chime, bright at
+ * the strike and settling to a shimmer. The patch also has a partial at forty
+ * times the note that rises over minutes; it is above hearing here and is left out.
+ */
+function chime(
+  { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
+  open: number,
+  midi: number,
+): Cast {
+  const root = context.createOscillator();
+  const octaves = context.createOscillator();
+  const glass = context.createOscillator();
+  const rootGain = context.createGain();
+  const octavesGain = context.createGain();
+  const glassGain = context.createGain();
+  root.frequency.value = frequency;
+  // Level scaling: the patch pulls the fundamental down toward the bass.
+  const bass = Math.max(0, Math.min(1, (60 - midi) / 24));
+  rootGain.gain.setValueAtTime(0, start);
+  rootGain.gain.linearRampToValueAtTime(0.5 * (1 - 0.6 * bass), start + 0.05);
+  octaves.frequency.value = Math.min(frequency * 4, nyquist);
+  octavesGain.gain.setValueAtTime(0, start);
+  octavesGain.gain.linearRampToValueAtTime(0.4 * (0.6 + 0.4 * velocity), start + 0.004);
+  octavesGain.gain.exponentialRampToValueAtTime(0.3 * (0.6 + 0.4 * velocity), start + 0.25);
+  glass.setPeriodicWave(fmWave(context, 1, 0.35));
+  glass.frequency.value = Math.min(frequency * 14.16, nyquist);
+  glassGain.gain.setValueAtTime(0, start);
+  glassGain.gain.linearRampToValueAtTime(0.32 * (0.4 + 0.6 * velocity), start + 0.003);
+  glassGain.gain.exponentialRampToValueAtTime(0.2 * (0.4 + 0.6 * velocity), start + 0.3);
+  glassGain.gain.exponentialRampToValueAtTime(0.06, start + duration);
+  root.connect(rootGain);
+  octaves.connect(octavesGain);
+  glass.connect(glassGain);
+  rootGain.connect(envelope);
+  octavesGain.connect(envelope);
+  glassGain.connect(envelope);
+  const peak = 0.8 * velocity;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(peak, start + 0.006);
+  filter.frequency.value = Math.min(nyquist, Math.max(open * 1.4, frequency * 16));
+  filter.Q.value = 0.4;
+  return { oscillators: [root, octaves, glass], nodes: [rootGain, octavesGain, glassGain] };
+}
+
+/**
+ * A moon as deep space, after Tim Conrardy's DX7 DeepSpace: two carriers a
+ * wide ninth of a tone apart, at the note and nine percent above it, one
+ * arriving slowly and one at once and fading; and a low carrier at half the
+ * note with a little grain, under them. The patch flutters its low carrier
+ * at ten hertz and adds a very high partial; both are left out here. Airy:
+ * more the light between the bodies than a strike.
+ */
+function deep(
+  { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
+  open: number,
+): Cast {
+  const slow = context.createOscillator();
+  const quick = context.createOscillator();
+  const low = context.createOscillator();
+  const slowGain = context.createGain();
+  const quickGain = context.createGain();
+  const lowGain = context.createGain();
+  slow.frequency.value = frequency;
+  slow.detune.value = -2;
+  slowGain.gain.setValueAtTime(0, start);
+  slowGain.gain.linearRampToValueAtTime(0.5, start + Math.min(0.45, duration * 0.3));
+  quick.frequency.value = Math.min(frequency * 1.09, nyquist);
+  quickGain.gain.setValueAtTime(0, start);
+  quickGain.gain.linearRampToValueAtTime(0.32 * (0.5 + 0.5 * velocity), start + 0.03);
+  quickGain.gain.exponentialRampToValueAtTime(0.12, start + Math.min(1.2, duration * 0.6));
+  low.setPeriodicWave(fmWave(context, 1, 0.5));
+  low.frequency.value = frequency / 2;
+  lowGain.gain.setValueAtTime(0, start);
+  lowGain.gain.linearRampToValueAtTime(0.3, start + 0.08);
+  slow.connect(slowGain);
+  quick.connect(quickGain);
+  low.connect(lowGain);
+  slowGain.connect(envelope);
+  quickGain.connect(envelope);
+  lowGain.connect(envelope);
+  const peak = 0.75 * velocity;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(peak, start + 0.05);
+  filter.frequency.value = Math.min(nyquist, open * 0.9);
+  filter.Q.value = 0.4;
+  return { oscillators: [slow, quick, low], nodes: [slowGain, quickGain, lowGain] };
 }
 
 export interface VoiceEngineOptions {
@@ -804,10 +900,9 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   /**
    * A body's patch follows its place in the tree, the way an ensemble is cast
    * by section: the sun is a pad (bowed, slow to bloom, held), planets are
-   * plucks (a harp string: bright for an instant, then a plain ringing
-   * fundamental), and moons take their timbre in turn round their parent:
-   * bells (the metallophone: gongs when heavy and low, plinks when small or
-   * high), plucked strings, and voices. Every patch is three oscillators feeding
+   * harps (struck, then blooming), and moons take their timbre in turn round their parent:
+   * deep space, chimes, plucked strings, and voices, with the old bell (the
+   * metallophone) kept for the asking. Every patch is three oscillators feeding
    * one envelope and one lowpass, so the voice budget is the same whatever is cast.
    */
   function excite(
@@ -819,7 +914,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     shade: number,
     weight = 0.5,
     role: Role = "moon",
-    timbre: Timbre = "bell",
+    timbre: Timbre = "deep",
   ) {
     if (!context || !bus) return;
     // The struck sun breathes longer than its mass alone would give it.
@@ -853,7 +948,11 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
             ? string(patch, open * lit * (0.55 + 0.9 * spread))
             : timbre === "vox"
               ? vox(patch, open * lit * (0.55 + 0.9 * spread))
-              : bell(patch, open * lit * (0.55 + 0.9 * spread), weight, midi);
+              : timbre === "chime"
+                ? chime(patch, open * lit * (0.55 + 0.9 * spread), midi)
+                : timbre === "deep"
+                  ? deep(patch, open * lit * (0.55 + 0.9 * spread))
+                  : bell(patch, open * lit * (0.55 + 0.9 * spread), weight, midi);
     envelope.gain.exponentialRampToValueAtTime(0.00001, start + duration - 0.025);
     envelope.gain.linearRampToValueAtTime(0, start + duration);
     // Every tone darkens as it rings, the way a pedaled string loses its top first.
@@ -1000,7 +1099,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
         }
         const body = byId.get(id);
         const role = body ? roleOf(depthOf(body, byId)) : "moon";
-        const timbre = body ? timbreOf(body, state.bodies) : "bell";
+        const timbre = body ? timbreOf(body, state.bodies) : "deep";
         excite(
           note.midi,
           note.velocity,
