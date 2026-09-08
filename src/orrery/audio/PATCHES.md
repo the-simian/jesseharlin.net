@@ -51,3 +51,12 @@ instrument's palette.
   under op 3 quietly; ops 2 and 5 are silent. Attack rate 66 gives a soft
   blown onset, and a pitch envelope dips a hair under the note at the start.
   Intended use: a planet patch alongside the harp pluck, chosen per ensemble.
+
+- **PANFLUTE1** (`9ba7f1cdd43bbf80563763bfe071bb5de69b5440`): an alternative
+  moon or planet. Algorithm 7, feedback 7, triangle LFO speed 46 delayed with
+  pitch depth 21 (a vibrato that arrives late). Carriers op 1 and op 3 both at
+  ratio 3 (detune -4 and +7, a chorused pair) and op 5 at ratio 0.5 under
+  them; op 2 (ratio 3) modulates op 1, op 4 is a fixed breath near 5.5 Hz that
+  decays as chiff, op 6 at ratio 4.62 with feedback modulates op 5. Transpose
+  17. A pitch envelope scoops from a little under. The chiff and the late
+  vibrato are the pan flute; it would suit either a slow moon or a planet.
