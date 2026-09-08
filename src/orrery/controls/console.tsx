@@ -115,7 +115,7 @@ export function Console(props: ConsoleProps) {
               <option value="">none selected</option>
               {props.bodies.map((body) => (
                 <option key={body.id} value={body.id}>
-                  {bodyName(body, props.bodies)}
+                  {bodyName(body, props.bodies)}, {PATCH_NAMES[patchOf(body, props.bodies)]}
                 </option>
               ))}
             </select>
