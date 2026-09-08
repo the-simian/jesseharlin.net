@@ -1,5 +1,5 @@
 import { createVoiceEngine } from "./audio/voice";
-import { createSimulation } from "./model/simulation";
+import { createSimulation, spreadAt } from "./model/simulation";
 import type { BodyPosition, Contact } from "./model/types";
 import type { OrreryStore } from "./store";
 
@@ -71,7 +71,8 @@ export function createOrreryRuntime(store: OrreryStore) {
       snapshots.push(frame);
     }
     const latest = frames.at(-1);
-    if (latest) voice.updateFrame(latest.pitchOffsets, latest.time, fresh);
+    if (latest)
+      voice.updateFrame(latest.pitchOffsets, latest.time, fresh, spreadAt(state, latest.positions));
     if (state.soundEnabled && state.activeView) {
       voice.scheduleContacts(fresh, state.activeView, simulationTime);
     }

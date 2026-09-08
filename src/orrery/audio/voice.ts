@@ -6,6 +6,7 @@ import { sharedMix } from "../mix";
 import { createInitialState } from "../model/commands";
 import { decayCurve } from "../model/decay";
 import { midiToHz, soundingPitch } from "../model/pitch";
+import { depthOf } from "../model/tree";
 import type { Contact, InstrumentState, ViewName } from "../model/types";
 import { validateState } from "../model/validate";
 
@@ -62,6 +63,167 @@ interface Excitation {
   oscillators: OscillatorNode[];
   nodes: AudioNode[];
 }
+
+/** Where a body sits in the tree decides its section. */
+export type Role = "sun" | "planet" | "moon";
+
+export function roleOf(depth: number): Role {
+  return depth === 0 ? "sun" : depth === 1 ? "planet" : "moon";
+}
+
+/** What every patch is handed: the note, its time, and the shared envelope and filter. */
+interface Patch {
+  context: AudioContext;
+  frequency: number;
+  velocity: number;
+  start: number;
+  duration: number;
+  nyquist: number;
+  envelope: GainNode;
+  filter: BiquadFilterNode;
+}
+
+interface Cast {
+  /** The first oscillator is the carrier at the fundamental; its end releases the voice. */
+  oscillators: OscillatorNode[];
+  nodes: AudioNode[];
+}
+
+/**
+ * The sun as the string section far upstage: the hushed, held strings of Ives'
+ * The Unanswered Question. Two triangles a few cents apart drift slowly against
+ * each other over a sine an octave down; the section swells in over more than a
+ * second, holds low and dark, and darkens further as it fades. Nothing about it
+ * should pulse or bite.
+ */
+function pad(
+  { context, frequency, velocity, start, duration, envelope, filter }: Patch,
+  open: number,
+): Cast {
+  const left = context.createOscillator();
+  const right = context.createOscillator();
+  const sub = context.createOscillator();
+  const section = context.createGain();
+  const subGain = context.createGain();
+  left.type = "triangle";
+  right.type = "triangle";
+  left.frequency.value = frequency;
+  right.frequency.value = frequency;
+  left.detune.value = -4;
+  right.detune.value = 4;
+  sub.frequency.value = frequency / 2;
+  section.gain.value = 0.3;
+  subGain.gain.value = 0.3;
+  left.connect(section);
+  right.connect(section);
+  sub.connect(subGain);
+  section.connect(envelope);
+  subGain.connect(envelope);
+  const peak = 0.3 + 0.25 * velocity;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(peak, start + 1.3);
+  envelope.gain.exponentialRampToValueAtTime(peak * 0.85, start + Math.max(1.4, duration * 0.5));
+  // The bows open the tone over the first two seconds, then it closes with the fade.
+  filter.frequency.setValueAtTime(Math.max(120, frequency * 1.2), start);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(180, open * 0.25), start + 2.0);
+  filter.Q.value = 0.6;
+  return { oscillators: [left, right, sub], nodes: [section, subGain] };
+}
+
+/**
+ * A planet as a harp string: a sine carrier, a harmonic partial that flashes
+ * and is gone in a few hundredths of a second, and a pick click, then the
+ * fundamental rings plainly and closes fast.
+ */
+function pluck(
+  { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
+  open: number,
+): Cast {
+  const carrier = context.createOscillator();
+  const modulator = context.createOscillator();
+  const pick = context.createOscillator();
+  const modulation = context.createGain();
+  const pickGain = context.createGain();
+  carrier.frequency.value = frequency;
+  modulator.frequency.value = Math.min(frequency * 2, nyquist);
+  modulation.gain.setValueAtTime(frequency * (0.4 + 1.4 * velocity), start);
+  modulation.gain.exponentialRampToValueAtTime(frequency * 0.02, start + 0.06);
+  modulation.gain.exponentialRampToValueAtTime(0.001, start + Math.min(duration, 0.6));
+  modulator.connect(modulation);
+  modulation.connect(carrier.frequency);
+  pick.frequency.value = Math.min(frequency * 5, nyquist);
+  pickGain.gain.setValueAtTime(0, start);
+  pickGain.gain.linearRampToValueAtTime(0.3 * velocity, start + 0.002);
+  pickGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.02);
+  pick.connect(pickGain);
+  pickGain.connect(filter);
+  carrier.connect(envelope);
+  const peak = 0.9 * velocity;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(peak, start + 0.0015);
+  envelope.gain.exponentialRampToValueAtTime(peak * 0.35, start + Math.min(duration * 0.5, 0.3));
+  filter.frequency.setValueAtTime(Math.min(nyquist, open * 1.3), start);
+  filter.frequency.exponentialRampToValueAtTime(
+    Math.max(200, frequency * 2.5),
+    start + Math.min(duration * 0.5, 0.45),
+  );
+  filter.Q.value = 0.7;
+  return { oscillators: [carrier, modulator, pick], nodes: [modulation, pickGain] };
+}
+
+/**
+ * A moon as a bell: the metallophone. Heavy low moons are gongs (deep
+ * inharmonic partial, long soft bloom), small or high moons are plinks (bright,
+ * short, glassy), and the rest are pedaled strings between the two.
+ */
+function bell(
+  { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
+  open: number,
+  weight: number,
+  midi: number,
+): Cast {
+  const register = Math.max(0, Math.min(1, (midi - 40) / 40));
+  const gong = weight > 0.6 && register < 0.45;
+  const plink = weight < 0.3 || register > 0.75;
+  const carrier = context.createOscillator();
+  const modulator = context.createOscillator();
+  const hammer = context.createOscillator();
+  const modulation = context.createGain();
+  const hammerGain = context.createGain();
+  carrier.frequency.value = frequency;
+  const ratioFm = gong ? 1.41 : plink ? 3.53 : 2.0;
+  modulator.frequency.value = Math.min(frequency * ratioFm, nyquist);
+  const brightness = (gong ? 0.5 : plink ? 1.1 : 0.8) * (0.7 + 0.5 * velocity);
+  modulation.gain.setValueAtTime(frequency * (0.2 + 1.0 * velocity ** 2) * brightness, start);
+  modulation.gain.exponentialRampToValueAtTime(
+    frequency * (gong ? 0.08 : 0.01),
+    start + (gong ? 0.6 : plink ? 0.05 : 0.12),
+  );
+  modulation.gain.exponentialRampToValueAtTime(0.001, start + duration);
+  modulator.connect(modulation);
+  modulation.connect(carrier.frequency);
+  // The hammer: a short burst of a high partial that makes the attack a strike.
+  hammer.frequency.value = Math.min(frequency * (plink ? 6.1 : 4.2), nyquist);
+  hammerGain.gain.setValueAtTime(0, start);
+  hammerGain.gain.linearRampToValueAtTime((gong ? 0.15 : 0.35) * velocity, start + 0.003);
+  hammerGain.gain.exponentialRampToValueAtTime(0.0001, start + (gong ? 0.12 : 0.05));
+  hammer.connect(hammerGain);
+  hammerGain.connect(filter);
+  // A gentle notch a tenth above the fundamental thins the body of the bell so
+  // the strike and the shimmer read, not the honk between them.
+  const notch = context.createBiquadFilter();
+  notch.type = "peaking";
+  notch.frequency.value = Math.min(nyquist, frequency * 2.4);
+  notch.Q.value = 1.4;
+  notch.gain.value = -7;
+  carrier.connect(notch);
+  notch.connect(envelope);
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(0.9 * velocity, start + (gong ? 0.012 : 0.002));
+  filter.frequency.value = Math.min(nyquist, open * (plink ? 1.6 : gong ? 0.6 : 1));
+  filter.Q.value = gong ? 1.2 : 0.5;
+  return { oscillators: [carrier, modulator, hammer], nodes: [modulation, hammerGain, notch] };
+}
 export interface VoiceEngineOptions {
   onSuppressed?: (count: number) => void;
 }
@@ -69,6 +231,8 @@ export interface VoiceEngineOptions {
 export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   let state = createInitialState();
   let context: AudioContext | undefined;
+  let glue: DynamicsCompressorNode | undefined;
+  let makeup: GainNode | undefined;
   let master: DynamicsCompressorNode | undefined;
   let bus: GainNode | undefined;
   let bells: GainNode | undefined;
@@ -105,27 +269,56 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   const unsubscribeMix = sharedMix.subscribe(applyMix);
   let enabled = false;
   let liveOffsets: Readonly<Record<string, number>> | undefined;
+  /**
+   * The drone is a chord of held strings, not a note: the sun's root two
+   * octaves down, the fifth above it, the root an octave down, and the scale's
+   * tenth above the sun, quiet and wide, the way the strings sit under Ives' The
+   * Unanswered Question. It glides when the comet moves the root.
+   */
   let drone:
-    | { oscillators: OscillatorNode[]; filter: BiquadFilterNode; gain: GainNode; midi: number }
+    | {
+        strings: { oscillators: OscillatorNode[]; interval: number }[];
+        nodes: AudioNode[];
+        filter: BiquadFilterNode;
+        gain: GainNode;
+        midi: number;
+      }
     | undefined;
   let shades: number[] = [];
+  /**
+   * The ensemble's spread, 0 drawn in to 1 flung out, eased so the orchestration
+   * tilts rather than jumps: the sun's pad and drone warm and open as the bodies
+   * draw in; the moons brighten and thin as they fly out.
+   */
+  let spread = 0.5;
   function stopDrone() {
     if (!drone) return;
-    for (const oscillator of drone.oscillators) {
-      oscillator.stop();
-      oscillator.disconnect();
-    }
+    for (const string of drone.strings)
+      for (const oscillator of string.oscillators) {
+        oscillator.stop();
+        oscillator.disconnect();
+      }
+    for (const node of drone.nodes) node.disconnect();
     drone.filter.disconnect();
     drone.gain.disconnect();
     drone = undefined;
   }
+  /** The chord's intervals from the sun's note, with the tenth taken from the scale. */
+  function droneIntervals(): number[] {
+    const third = state.scale.includes(3) ? 3 : state.scale.includes(4) ? 4 : 7;
+    return [-24, -17, -12, 12 + third];
+  }
+  /** How loud each string of the chord is, bottom to top; the whole breathes with the tilt. */
+  const DRONE_LEVELS = [0.04, 0.022, 0.02, 0.012];
   function updateFrame(
     pitchOffsets: Readonly<Record<string, number>>,
     time: number,
     contacts: readonly Contact[] = [],
+    spreadNow = spread,
   ) {
     liveOffsets = pitchOffsets;
     shades = [...shades, ...contacts.map((contact) => contact.shade)].slice(-16);
+    spread += (Math.max(0, Math.min(1, spreadNow)) - spread) * 0.05;
     if (state.soundEnabled && state.activeView) updateDrone(time);
   }
   function updateDrone(time = 0) {
@@ -133,40 +326,86 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     const sun = state.bodies.find((body) => body.parentId === null);
     if (!sun) return;
     const view = state.activeView ?? "telescope";
-    // The drone sits an octave under the sun's note, so the bells ring above it.
-    const midi = soundingPitch(state, sun.id, view, 0, liveOffsets) - 12;
-    const frequency = midiToHz(midi);
+    const midi = soundingPitch(state, sun.id, view, 0, liveOffsets);
     const now = context.currentTime;
+    const near = 1 - spread;
     if (!drone) {
-      const filter = context.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.Q.value = 0.5;
-      const gain = context.createGain();
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.06, now + 1.5);
       const audio = context;
-      const oscillators = [-4, 4].map((cents) => {
-        const oscillator = audio.createOscillator();
-        oscillator.type = "triangle";
-        oscillator.frequency.value = frequency;
-        oscillator.detune.value = cents;
-        oscillator.connect(filter);
-        oscillator.start(now);
-        return oscillator;
+      const filter = audio.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.Q.value = 0.3;
+      // The drone's EQ: the sub and the top of the chord are wanted; the hoot
+      // between them is not. A shallow notch through the upper bass lowers it
+      // a little, and a highpass under the sub keeps rumble out.
+      const rumble = audio.createBiquadFilter();
+      rumble.type = "highpass";
+      rumble.frequency.value = 32;
+      rumble.Q.value = 0.5;
+      const hum = audio.createBiquadFilter();
+      hum.type = "peaking";
+      hum.frequency.value = 130;
+      hum.Q.value = 1.2;
+      hum.gain.value = -4;
+      rumble.connect(hum);
+      hum.connect(filter);
+      const gain = audio.createGain();
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.7 + 0.6 * near, now + 2.5);
+      const nodes: AudioNode[] = [rumble, hum];
+      const strings = droneIntervals().map((interval, index) => {
+        const frequency = midiToHz(midi + interval);
+        const level = audio.createGain();
+        level.gain.value = DRONE_LEVELS[index] ?? 0.01;
+        level.connect(rumble);
+        nodes.push(level);
+        // Two triangles a few cents apart carry each string; under the low ones a
+        // quiet sawtooth, mostly closed off by the lowpass, gives the grain of a bow.
+        const parts: { type: OscillatorType; cents: number; gain: number }[] = [
+          { type: "triangle", cents: -4, gain: 1 },
+          { type: "triangle", cents: 4, gain: 1 },
+        ];
+        if (index < 2) parts.push({ type: "sawtooth", cents: 0, gain: 0.22 });
+        const oscillators = parts.map((part) => {
+          const oscillator = audio.createOscillator();
+          oscillator.type = part.type;
+          oscillator.frequency.value = frequency;
+          oscillator.detune.value = part.cents;
+          if (part.gain === 1) oscillator.connect(level);
+          else {
+            const bow = audio.createGain();
+            bow.gain.value = part.gain;
+            oscillator.connect(bow);
+            bow.connect(level);
+            nodes.push(bow);
+          }
+          oscillator.start(now);
+          return oscillator;
+        });
+        return { oscillators, interval };
       });
       filter.connect(gain);
       gain.connect(droneBus ?? bus);
-      drone = { oscillators, filter, gain, midi };
+      drone = { strings, nodes, filter, gain, midi };
     }
     if (drone.midi !== midi) {
-      for (const oscillator of drone.oscillators)
-        oscillator.frequency.setTargetAtTime(frequency, now + LOOKAHEAD, 0.3);
+      // Strings slide, they do not step.
+      for (const string of drone.strings)
+        for (const oscillator of string.oscillators)
+          oscillator.frequency.setTargetAtTime(
+            midiToHz(midi + string.interval),
+            now + LOOKAHEAD,
+            1.2,
+          );
       drone.midi = midi;
     }
     const shade = shades.reduce((sum, value) => sum + value, 0) / Math.max(1, shades.length);
     const cutoff =
-      (view === "pool" ? 350 : 600) * (1 + 0.15 * Math.sin(time / 13)) * (1 - 0.6 * shade);
+      (view === "pool" ? 350 : 600) *
+      (0.5 + 1.3 * near) *
+      (1 + 0.15 * Math.sin(time / 13)) *
+      (1 - 0.6 * shade);
     drone.filter.frequency.setTargetAtTime(cutoff, now, 2);
+    drone.gain.gain.setTargetAtTime(0.7 + 0.6 * near, now, 2);
   }
   let generation = 0;
   let mapping: { simulation: number; audio: number } | undefined;
@@ -194,12 +433,24 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     const request = ++generation;
     if (!context) {
       context = new AudioContext();
+      // Two stages tame the sum. The glue is gentle and slow: it leans on the
+      // loud cascades so the small ornaments underneath come forward, and the
+      // makeup gain lifts the whole. The limiter after it is a brick wall for
+      // whatever the glue lets through.
+      glue = context.createDynamicsCompressor();
+      glue.threshold.value = -30;
+      glue.knee.value = 18;
+      glue.ratio.value = 3.5;
+      glue.attack.value = 0.012;
+      glue.release.value = 0.3;
+      makeup = context.createGain();
+      makeup.gain.value = 1.7;
       master = context.createDynamicsCompressor();
-      master.threshold.value = -12;
+      master.threshold.value = -6;
       master.knee.value = 0;
       master.ratio.value = 20;
-      master.attack.value = 0.003;
-      master.release.value = 0.15;
+      master.attack.value = 0.002;
+      master.release.value = 0.12;
       bus = context.createGain();
       bells = context.createGain();
       droneBus = context.createGain();
@@ -212,10 +463,12 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       // Post-compressor trim includes transient overshoot in the measured peak budget.
       output.gain.value = 0.85;
       bus.connect(dry);
-      dry.connect(master);
+      dry.connect(glue);
       bus.connect(reverb);
       reverb.connect(wet);
-      wet.connect(master);
+      wet.connect(glue);
+      glue.connect(makeup);
+      makeup.connect(master);
       master.connect(output);
       output.connect(context.destination);
       context.onstatechange = () => {
@@ -265,6 +518,14 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       updateDrone();
     }
   }
+  /**
+   * A body's patch follows its place in the tree, the way an ensemble is cast
+   * by section: the sun is a pad (bowed, slow to bloom, held), planets are
+   * plucks (a harp string: bright for an instant, then a plain ringing
+   * fundamental), and moons are bells (the metallophone: gongs when heavy and
+   * low, plinks when small or high). Every patch is three oscillators feeding one
+   * envelope and one lowpass, so the voice budget is the same whatever is cast.
+   */
   function excite(
     midi: number,
     velocity: number,
@@ -273,80 +534,52 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     duration: number,
     shade: number,
     weight = 0.5,
+    role: Role = "moon",
   ) {
     if (!context || !bus) return;
     // The struck sun breathes longer than its mass alone would give it.
-    if (weight >= 0.99) duration *= 1.4;
+    if (role === "sun") duration *= 1.4;
     const frequency = midiToHz(midi);
     if (!Number.isFinite(frequency) || frequency <= 0 || frequency >= context.sampleRate / 2)
       return;
-    // Three voices by role, the way an ensemble is cast: heavy slow bodies are
-    // gongs (deep inharmonic partial, long soft bloom), middle bodies are pedaled
-    // strings (hammer transient over a warm fundamental), and small quick bodies
-    // are metallophone plinks (bright, short, a little glassy). Weight and register
-    // decide the casting, so a body's voice follows its size and its note.
-    const register = Math.max(0, Math.min(1, (midi - 40) / 40));
-    const gong = weight > 0.6 && register < 0.45;
-    // The sun struck: the heaviest body, so it gets the softest hand and the longest breath.
-    const sunStruck = weight >= 0.99;
-    const plink = weight < 0.3 || register > 0.75;
-    const carrier = context.createOscillator();
-    const modulator = context.createOscillator();
-    const hammer = context.createOscillator();
-    const modulation = context.createGain();
-    const hammerGain = context.createGain();
+    const nyquist = context.sampleRate * 0.45;
     const envelope = context.createGain();
     const filter = context.createBiquadFilter();
-    const nyquist = context.sampleRate * 0.45;
-    carrier.frequency.value = frequency;
-    const ratioFm = gong ? 1.41 : plink ? 3.53 : 2.0;
-    modulator.frequency.value = Math.min(frequency * ratioFm, nyquist);
-    const brightness = (gong ? 0.5 : plink ? 1.1 : 0.8) * (0.7 + 0.5 * velocity);
-    modulation.gain.setValueAtTime(frequency * (0.2 + 1.0 * velocity ** 2) * brightness, start);
-    modulation.gain.exponentialRampToValueAtTime(
-      frequency * (gong ? 0.08 : 0.01),
-      start + (gong ? 0.6 : plink ? 0.05 : 0.12),
-    );
-    modulation.gain.exponentialRampToValueAtTime(0.001, start + duration);
-    modulator.connect(modulation);
-    modulation.connect(carrier.frequency);
-    // The hammer: a short burst of a high partial that makes the attack a strike.
-    hammer.frequency.value = Math.min(frequency * (plink ? 6.1 : 4.2), nyquist);
-    hammerGain.gain.setValueAtTime(0, start);
-    hammerGain.gain.linearRampToValueAtTime(
-      (sunStruck ? 0.06 : gong ? 0.15 : 0.35) * velocity,
-      start + (sunStruck ? 0.02 : 0.003),
-    );
-    hammerGain.gain.exponentialRampToValueAtTime(0.0001, start + (gong ? 0.12 : 0.05));
-    hammer.connect(hammerGain);
-    hammerGain.connect(filter);
-    envelope.gain.setValueAtTime(0, start);
-    envelope.gain.linearRampToValueAtTime(
-      (sunStruck ? 0.55 : 0.9) * velocity,
-      start + (sunStruck ? 0.08 : gong ? 0.012 : 0.002),
-    );
-    envelope.gain.exponentialRampToValueAtTime(0.00001, start + duration - 0.025);
-    envelope.gain.linearRampToValueAtTime(0, start + duration);
     filter.type = "lowpass";
     const open = view === "pool" ? 1200 + 1800 * velocity ** 2 : 2500 + 4000 * velocity ** 2;
-    filter.frequency.value = Math.min(
+    const lit = 1 - 0.88 * Math.max(0, Math.min(1, shade));
+    const patch: Patch = {
+      context,
+      frequency,
+      velocity,
+      start,
+      duration,
       nyquist,
-      open * (plink ? 1.6 : gong ? 0.6 : 1) * (1 - 0.88 * Math.max(0, Math.min(1, shade))),
-    );
-    // The tone darkens as it rings, the way a pedaled string loses its top first.
+      envelope,
+      filter,
+    };
+    // The tilt: drawn in, the sun opens; flung out, the moons do.
+    const cast =
+      role === "sun"
+        ? pad(patch, open * lit * (0.5 + 1.0 * (1 - spread)))
+        : role === "planet"
+          ? pluck(patch, open * lit)
+          : bell(patch, open * lit * (0.55 + 0.9 * spread), weight, midi);
+    envelope.gain.exponentialRampToValueAtTime(0.00001, start + duration - 0.025);
+    envelope.gain.linearRampToValueAtTime(0, start + duration);
+    // Every tone darkens as it rings, the way a pedaled string loses its top first.
     filter.frequency.exponentialRampToValueAtTime(Math.max(120, frequency * 1.5), start + duration);
-    filter.Q.value = gong ? 1.2 : 0.5;
-    carrier.connect(envelope);
     envelope.connect(filter);
     filter.connect(bells ?? bus);
     const voice: Excitation = {
       start,
       end: start + duration,
-      oscillators: [carrier, modulator, hammer],
-      nodes: [carrier, modulator, hammer, modulation, hammerGain, envelope, filter],
+      oscillators: cast.oscillators,
+      nodes: [...cast.oscillators, ...cast.nodes, envelope, filter],
     };
     voices.add(voice);
-    carrier.onended = () => release(voice);
+    const carrier = cast.oscillators[0];
+    if (carrier) carrier.onended = () => release(voice);
     for (const oscillator of voice.oscillators) {
       oscillator.start(start);
       oscillator.stop(voice.end);
@@ -430,6 +663,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
           });
       }
     }
+    const byId = new Map(state.bodies.map((body) => [body.id, body]));
     let suppressed = 0;
     for (const [tick, batch] of [...batches].sort(([a], [b]) => a - b)) {
       for (const [id, note] of [...batch].sort(([, a], [, b]) => b.velocity - a.velocity)) {
@@ -452,7 +686,9 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
           suppressed++;
           continue;
         }
-        excite(note.midi, note.velocity, view, start, duration, note.shade, note.weight);
+        const body = byId.get(id);
+        const role = body ? roleOf(depthOf(body, byId)) : "moon";
+        excite(note.midi, note.velocity, view, start, duration, note.shade, note.weight, role);
       }
     }
     // Retain only the deduplication window that can still be scheduled.

@@ -72,6 +72,46 @@ export function shadeAt(
   return 1 - light;
 }
 
+/**
+ * How spread out the ensemble is, 0 drawn in to 1 flung out: the mean, over the
+ * orbiting bodies, of each one's distance from the sun measured between the
+ * nearest and farthest it can ever be along its chain of orbits. Comets are left
+ * out; they would swamp the mean. The audio reads this as a tilt: near, the sun
+ * warms; far, the moons twinkle.
+ */
+export function spreadAt(state: InstrumentState, positions: BodyPosition[]): number {
+  const byId = new Map(state.bodies.map((body) => [body.id, body]));
+  let sum = 0;
+  let count = 0;
+  for (const body of state.bodies) {
+    if (body.parentId === null) continue;
+    let planet: Body = body;
+    let moonReach = 0;
+    let farthest = 0;
+    let comet = false;
+    let cursor: Body | undefined = body;
+    while (cursor && cursor.parentId !== null) {
+      if (cursor.strikesParent) comet = true;
+      farthest += cursor.orbitRadius * (1 + cursor.eccentricity);
+      planet = cursor;
+      const parent = byId.get(cursor.parentId);
+      if (parent && parent.parentId !== null)
+        moonReach += cursor.orbitRadius * (1 + cursor.eccentricity);
+      cursor = parent;
+    }
+    if (comet) continue;
+    const nearest = Math.max(0, planet.orbitRadius * (1 - planet.eccentricity) - moonReach);
+    const span = farthest - nearest;
+    if (span <= 0) continue;
+    const position = positions.find((candidate) => candidate.id === body.id);
+    if (!position) continue;
+    const distance = Math.hypot(position.x, position.y);
+    sum += Math.max(0, Math.min(1, (distance - nearest) / span));
+    count++;
+  }
+  return count === 0 ? 0.5 : sum / count;
+}
+
 export function createSimulation(initial: InstrumentState) {
   if (!validateState(initial).ok) throw new Error("Invalid initial arrangement.");
   let state = initial;

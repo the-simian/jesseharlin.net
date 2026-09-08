@@ -15,7 +15,7 @@ import {
 import { decayCurve } from "./decay";
 import { midiToHz, pitchClass, snapToScale, soundingPitch } from "./pitch";
 import { createEmptyState } from "./presets";
-import { createSimulation, shadeAt } from "./simulation";
+import { createSimulation, shadeAt, spreadAt } from "./simulation";
 import { depthOf } from "./tree";
 import { type Body, type InstrumentState, LIMITS } from "./types";
 import { validateState } from "./validate";
@@ -504,4 +504,34 @@ test("the bare decay curve preserves gong, carrier, and ornament roles across an
       assert(decayCurve(midi, 0.5, 1, 0, anchor) >= decayCurve(midi, 0.5, 1, 5, anchor));
     }
   }
+});
+
+test("spread runs from drawn in at periapsis to flung out at apoapsis and ignores comets", () => {
+  const state = createEmptyState();
+  const sun = state.bodies[0];
+  assert(sun);
+  const planet = {
+    ...sun,
+    id: "planet",
+    parentId: sun.id,
+    orbitRadius: 6,
+    eccentricity: 0.5,
+    periapsisRadians: 0,
+    phaseRadians: 0,
+    strikesParent: false,
+  };
+  const comet = { ...planet, id: "comet", orbitRadius: 30, eccentricity: 0.9, strikesParent: true };
+  const arranged = { ...state, bodies: [sun, planet, comet] };
+  const near = spreadAt(arranged, [
+    { id: sun.id, x: 0, y: 0 },
+    { id: "planet", x: 3, y: 0 },
+    { id: "comet", x: 57, y: 0 },
+  ]);
+  const far = spreadAt(arranged, [
+    { id: sun.id, x: 0, y: 0 },
+    { id: "planet", x: -9, y: 0 },
+    { id: "comet", x: 3, y: 0 },
+  ]);
+  assert(Math.abs(near) < 1e-9 && Math.abs(far - 1) < 1e-9, `${near} ${far}`);
+  assert(spreadAt(state, [{ id: sun.id, x: 0, y: 0 }]) === 0.5, "A lone sun sits at the middle.");
 });

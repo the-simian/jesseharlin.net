@@ -47,10 +47,14 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
   const parameter = () => ({
     value: 0,
     targets: [] as number[],
+    /** Values programmed on the timeline, in order. */
+    scheduled: [] as number[],
     setTargetAtTime(value: number) {
       this.targets.push(value);
     },
-    setValueAtTime() {},
+    setValueAtTime(value: number) {
+      this.scheduled.push(value);
+    },
     linearRampToValueAtTime() {},
     exponentialRampToValueAtTime() {},
   });
@@ -61,7 +65,7 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     stops: (number | undefined)[];
   }[] = [];
   const drones: typeof oscillators = [];
-  const filters: ReturnType<typeof parameter>[] = [];
+  const filters: { frequency: ReturnType<typeof parameter>; type: string }[] = [];
   let created = 0;
   const context = {
     currentTime: 10,
@@ -90,8 +94,9 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     createGain: () => ({ ...node(), gain: parameter() }),
     createBiquadFilter: () => {
       const frequency = parameter();
-      filters.push(frequency);
-      return { ...node(), frequency, Q: parameter(), type: "lowpass" };
+      const filter = { ...node(), frequency, Q: parameter(), gain: parameter(), type: "lowpass" };
+      filters.push(filter);
+      return filter;
     },
     createOscillator: () => {
       const oscillator = {
@@ -104,7 +109,8 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
         onended: null,
         start(time: number) {
           oscillator.starts.push(time);
-          if (oscillator.type === "triangle") {
+          // Drone strings start now; struck voices start a lookahead later.
+          if (time === context.currentTime) {
             oscillators.splice(oscillators.indexOf(oscillator), 1);
             drones.push(oscillator);
           }
@@ -139,14 +145,18 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     };
     engine.setState(state);
     await engine.enable();
-    assert(drones.length === 2 && drones.every((oscillator) => oscillator.starts[0] === 10));
-    engine.updateFrame({ sun: 7 }, 1, []);
     assert(
-      drones.every(
-        (oscillator) =>
-          Math.abs((oscillator.frequency.targets.at(-1) ?? 0) - midiToHz(51 - 12)) < 1e-8,
-      ),
-      "Drone must mirror live sun pitch.",
+      drones.length >= 8 && drones.every((oscillator) => oscillator.starts[0] === 10),
+      "The drone is a chord of at least four strings, each at least two oscillators.",
+    );
+    engine.updateFrame({ sun: 7 }, 1, []);
+    const litCutoff = filters[0]?.frequency.targets.at(-1) ?? 0;
+    const lowest = Math.min(
+      ...drones.map((oscillator) => oscillator.frequency.targets.at(-1) ?? 1e9),
+    );
+    assert(
+      Math.abs(lowest - midiToHz(51 - 24)) < 1e-8,
+      "The drone's bottom string must follow the live sun pitch two octaves down.",
     );
     const contacts: Contact[] = [
       {
@@ -178,7 +188,7 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
       contacts.map((contact) => ({ ...contact, shade: 1 })),
     );
     assert(
-      (filters[0]?.targets.at(-1) ?? 1000) < 150,
+      (filters[0]?.frequency.targets.at(-1) ?? 1000) < litCutoff * 0.5,
       "Recent shade must darken the drone filter.",
     );
     engine.scheduleContacts(contacts, "pool", 1);
@@ -187,12 +197,18 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     assert(Math.abs((oscillators[0]?.frequency.value ?? 0) - midiToHz(56)) < 1e-8);
     assert(Math.abs((oscillators[3]?.frequency.value ?? 0) - midiToHz(51)) < 1e-8);
     assert(oscillators.every((oscillator) => oscillator.starts[0] === 10.1));
-    assert(
-      filters
-        .filter((filter) => filter.targets.length === 0)
-        // Weightless test bodies are cast as plinks, whose filter opens 1.6 times wider.
-        .every((filter) => Math.abs(filter.value - (1200 + 1800 * 0.8 ** 2) * 1.6) < 1e-6),
-    );
+    // Every voice's lowpass opens above its fundamental and under Nyquist, whatever the patch.
+    for (const [index, midi] of [56, 51].entries()) {
+      // Struck voices own the lowpasses that are never retargeted; the drone's EQ is not one.
+      const filter = filters.filter(
+        (candidate) => candidate.type === "lowpass" && candidate.frequency.targets.length === 0,
+      )[index]?.frequency;
+      const opening = filter?.scheduled[0] ?? filter?.value ?? 0;
+      assert(
+        opening > midiToHz(midi) && opening < 48000 * 0.45,
+        `Voice ${index} opens at ${opening}.`,
+      );
+    }
     for (const [index, midi] of [56, 56, 56, 51, 51, 51].entries()) {
       assert(oscillators[index]?.stops[0] === 10.1 + decayFor(midi, 0.8));
     }
@@ -238,7 +254,13 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
       closing: 0,
     };
     engine.scheduleContacts([{ ...mixed, shade: 1 }], "pool", 5);
-    assert(Math.abs((filters.at(-1)?.value ?? 0) - 3000 * 0.12 * 1.6) < 1e-8);
+    // Full shade leaves an eighth of the light: a hard hit in the pool opens at 3000 Hz lit.
+    const shaded = filters.at(-1)?.frequency;
+    const shadedOpening = shaded?.scheduled[0] ?? shaded?.value ?? 0;
+    assert(
+      shadedOpening > 0 && shadedOpening < 3000 * 0.25,
+      `Shaded voice opens at ${shadedOpening}.`,
+    );
     assert(oscillators.length === before + 6);
     context.currentTime += 1.1;
     engine.scheduleContacts([{ ...mixed, time: 6.1 }], "pool", 6.1);
@@ -248,8 +270,9 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     engine.scheduleContacts([{ ...mixed, time: 7.1 }], "pool", 7.1);
     assert(oscillators.length === before + 9, "Both low sustains must outlive one second.");
     assert(suppressed === suppressedBefore + 3);
-    context.currentTime += 12;
-    engine.scheduleContacts([{ ...mixed, time: 19.1 }], "pool", 19.1);
+    // The sun's own note breathes 1.4 times longer than its register alone would give it.
+    context.currentTime += 16;
+    engine.scheduleContacts([{ ...mixed, time: 23.1 }], "pool", 23.1);
     assert(oscillators.length === before + 15, "Expired low sustains must free both slots.");
     engine.disable();
     const fullState = { ...state, maxVoices: 12 };
