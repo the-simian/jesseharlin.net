@@ -1,5 +1,12 @@
 import { test } from "bun:test";
-import { createVoiceEngine, decayFor, reverbImpulse, WOBBLE_RATE } from "../audio/voice";
+import {
+  createVoiceEngine,
+  decayFor,
+  fmWave,
+  reverbImpulse,
+  softCeiling,
+  WOBBLE_RATE,
+} from "../audio/voice";
 import { sharedMix } from "../mix";
 import { addBody, applyPreset, setActiveView, setSoundEnabled } from "./commands";
 import { midiToHz } from "./pitch";
@@ -91,6 +98,8 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
       getChannelData: () => new Float32Array(length),
     }),
     createConvolver: () => ({ ...node(), buffer: null }),
+    createWaveShaper: () => ({ ...node(), curve: null, oversample: "none" }),
+    createPeriodicWave: () => ({}),
     createGain: () => ({ ...node(), gain: parameter() }),
     createBiquadFilter: () => {
       const frequency = parameter();
@@ -107,6 +116,7 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
         starts: [] as number[],
         stops: [] as (number | undefined)[],
         onended: null,
+        setPeriodicWave() {},
         start(time: number) {
           oscillator.starts.push(time);
           // Drone strings start now; struck voices start a lookahead later.
@@ -419,4 +429,35 @@ test("synthetic reverb has distinct stereo tails, duration, darkness, and decay"
     );
   };
   assert(roughness(pool) < roughness(telescope));
+});
+
+test("the soft ceiling is monotonic, odd, and never leaves above full scale", () => {
+  const curve = softCeiling(513);
+  for (let i = 1; i < curve.length; i++) assert((curve[i] ?? 0) > (curve[i - 1] ?? 0));
+  assert(
+    Math.abs((curve[256] ?? 1) - 0) < 1e-6 && (curve[512] ?? 2) <= 1 && (curve[0] ?? -2) >= -1,
+  );
+  // Half scale passes with under a tenth taken off.
+  const half = curve[384] ?? 0;
+  assert(half > 0.44 && half < 0.5, `half scale maps to ${half}`);
+});
+
+test("an FM operator pair's spectrum is built from Bessel weights", () => {
+  const captured: { real: Float32Array; imaginary: Float32Array }[] = [];
+  const context = {
+    createPeriodicWave(real: Float32Array, imaginary: Float32Array) {
+      captured.push({ real, imaginary });
+      return {};
+    },
+  } as unknown as BaseAudioContext;
+  fmWave(context, 1, 1.2);
+  const wave = captured[0];
+  assert(wave !== undefined);
+  // Ratio one: the fundamental carries J0 less the folded J2, the second partial
+  // J1 plus the folded J3, and every harmonic is present.
+  assert(Math.abs((wave.imaginary[1] ?? 0) - (0.6711 - 0.1593)) < 1e-3);
+  assert(Math.abs((wave.imaginary[2] ?? 0) - (0.4983 + 0.0329)) < 1e-3);
+  assert((wave.imaginary[5] ?? 0) !== 0 && wave.real.every((value) => value === 0));
+  fmWave(context, 1, 1.2);
+  assert(captured.length === 1, "The same pair is built once per context.");
 });

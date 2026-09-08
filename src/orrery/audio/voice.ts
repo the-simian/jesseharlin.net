@@ -26,6 +26,17 @@ export function decayFor(
   return decayCurve(midi, velocity, weight, closing, anchorMidi) * 1.6 * sharedMix.getMix().decay;
 }
 
+/**
+ * A transfer curve that is straight through the middle and rounds off toward
+ * full scale: plain tanh, unit slope at rest, so quiet signal passes untouched
+ * and nothing can leave above one.
+ */
+export function softCeiling(samples = 2048): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(new ArrayBuffer(samples * 4));
+  for (let i = 0; i < samples; i++) curve[i] = Math.tanh((i / (samples - 1)) * 2 - 1);
+  return curve;
+}
+
 /** Deterministic stereo noise, increasingly filtered and faded to silence. */
 export function reverbImpulse(
   context: Pick<BaseAudioContext, "sampleRate" | "createBuffer">,
@@ -97,45 +108,89 @@ interface Cast {
   nodes: AudioNode[];
 }
 
+/** Bessel function of the first kind, by series; enough for the small indices here. */
+function bessel(order: number, x: number): number {
+  let sum = 0;
+  for (let k = 0; k < 24; k++) {
+    let term = (-1) ** k * (x / 2) ** (2 * k + order);
+    for (let i = 2; i <= k; i++) term /= i;
+    for (let i = 2; i <= order + k; i++) term /= i;
+    sum += term;
+  }
+  return sum;
+}
+
 /**
- * The sun as the string section far upstage: the hushed, held strings of Ives'
- * The Unanswered Question. Two triangles a few cents apart drift slowly against
- * each other over a sine an octave down; the section swells in over more than a
- * second, holds low and dark, and darkens further as it fades. Nothing about it
- * should pulse or bite.
+ * The spectrum of a single sine modulated by another at an integer ratio, as a
+ * waveform: partial 1 + n·ratio has amplitude J_n(index), with the negative
+ * orders folded back. One operator pair of a DX7, frozen at its sustain.
+ */
+const fmWaves = new WeakMap<BaseAudioContext, Map<string, PeriodicWave>>();
+export function fmWave(context: BaseAudioContext, ratio: number, index: number): PeriodicWave {
+  let cache = fmWaves.get(context);
+  if (!cache) {
+    cache = new Map();
+    fmWaves.set(context, cache);
+  }
+  const key = `${ratio}:${index}`;
+  let wave = cache.get(key);
+  if (wave) return wave;
+  const partials = 32;
+  const real = new Float32Array(partials);
+  const imaginary = new Float32Array(partials);
+  for (let n = -partials; n <= partials; n++) {
+    const partial = 1 + n * ratio;
+    if (partial === 0 || Math.abs(partial) >= partials) continue;
+    const amplitude = bessel(Math.abs(n), index) * (n < 0 && n % 2 !== 0 ? -1 : 1);
+    // A negative partial is the same sine with its sign flipped.
+    const slot = Math.abs(partial);
+    imaginary[slot] = (imaginary[slot] ?? 0) + (partial < 0 ? -amplitude : amplitude);
+  }
+  wave = context.createPeriodicWave(real, imaginary, { disableNormalization: false });
+  cache.set(key, wave);
+  return wave;
+}
+
+/**
+ * The sun as the string section far upstage, voiced after the DX7's
+ * OB GENVIV1: three carriers on the fundamental, a few cents apart, each
+ * lightly modulated by its own operator, at the fundamental, the octave, and
+ * the octave again, so the chorus is warm and the harmonics are all there but
+ * soft. It swells in over most of a second from a little under the pitch and
+ * settles, holds, and darkens as it fades. Nothing about it should bite.
  */
 function pad(
   { context, frequency, velocity, start, duration, envelope, filter }: Patch,
   open: number,
 ): Cast {
-  const left = context.createOscillator();
-  const right = context.createOscillator();
-  const sub = context.createOscillator();
   const section = context.createGain();
-  const subGain = context.createGain();
-  left.type = "triangle";
-  right.type = "triangle";
-  left.frequency.value = frequency;
-  right.frequency.value = frequency;
-  left.detune.value = -4;
-  right.detune.value = 4;
-  sub.frequency.value = frequency / 2;
-  section.gain.value = 0.3;
-  subGain.gain.value = 0.3;
-  left.connect(section);
-  right.connect(section);
-  sub.connect(subGain);
+  section.gain.value = 0.26;
+  const voices: { cents: number; ratio: number; index: number }[] = [
+    { cents: -6, ratio: 1, index: 1.2 },
+    { cents: 22, ratio: 2, index: 0.9 },
+    { cents: -5, ratio: 2, index: 0.7 },
+  ];
+  const oscillators = voices.map((voice) => {
+    const oscillator = context.createOscillator();
+    oscillator.setPeriodicWave(fmWave(context, voice.ratio, voice.index));
+    oscillator.frequency.value = frequency;
+    // The scoop: the note arrives from a little under, overshoots a hair, and settles.
+    oscillator.detune.setValueAtTime(voice.cents - 40, start);
+    oscillator.detune.linearRampToValueAtTime(voice.cents + 8, start + 0.3);
+    oscillator.detune.linearRampToValueAtTime(voice.cents, start + 0.9);
+    oscillator.connect(section);
+    return oscillator;
+  });
   section.connect(envelope);
-  subGain.connect(envelope);
   const peak = 0.3 + 0.25 * velocity;
   envelope.gain.setValueAtTime(0, start);
-  envelope.gain.linearRampToValueAtTime(peak, start + 1.3);
-  envelope.gain.exponentialRampToValueAtTime(peak * 0.85, start + Math.max(1.4, duration * 0.5));
-  // The bows open the tone over the first two seconds, then it closes with the fade.
+  envelope.gain.linearRampToValueAtTime(peak, start + 0.9);
+  envelope.gain.exponentialRampToValueAtTime(peak * 0.9, start + Math.max(1.2, duration * 0.5));
+  // The tone opens over the first two seconds, then closes with the fade.
   filter.frequency.setValueAtTime(Math.max(120, frequency * 1.2), start);
-  filter.frequency.exponentialRampToValueAtTime(Math.max(180, open * 0.25), start + 2.0);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(180, open * 0.3), start + 2.0);
   filter.Q.value = 0.6;
-  return { oscillators: [left, right, sub], nodes: [section, subGain] };
+  return { oscillators, nodes: [section] };
 }
 
 /**
@@ -263,12 +318,12 @@ function string(
   pick.type = "triangle";
   pick.frequency.value = Math.min(frequency * 3.01, nyquist);
   pickGain.gain.setValueAtTime(0, start);
-  pickGain.gain.linearRampToValueAtTime(0.22 * velocity, start + 0.002);
+  pickGain.gain.linearRampToValueAtTime(0.14 * velocity, start + 0.002);
   pickGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.035);
   pick.connect(pickGain);
   pickGain.connect(filter);
   carrier.connect(envelope);
-  const peak = 0.85 * velocity;
+  const peak = 0.6 * velocity;
   envelope.gain.setValueAtTime(0, start);
   envelope.gain.linearRampToValueAtTime(peak, start + 0.002);
   envelope.gain.exponentialRampToValueAtTime(peak * 0.45, start + Math.min(duration * 0.4, 0.5));
@@ -314,7 +369,7 @@ function vox(
   octave.frequency.value = Math.min(frequency * 2, nyquist);
   octave.detune.value = 9;
   octaveGain.gain.setValueAtTime(0, start);
-  octaveGain.gain.linearRampToValueAtTime(0.5 * velocity, start + Math.min(0.5, duration * 0.35));
+  octaveGain.gain.linearRampToValueAtTime(0.3 * velocity, start + Math.min(0.5, duration * 0.35));
   octaveGain.gain.exponentialRampToValueAtTime(0.02, start + duration);
   octave.connect(octaveGain);
   // The vowel: a peak an octave and a half up the harmonic series, the "oo"
@@ -322,11 +377,11 @@ function vox(
   formant.type = "peaking";
   formant.frequency.value = Math.min(nyquist, Math.max(frequency * 2.5, 500 + 600 * velocity));
   formant.Q.value = 2.5;
-  formant.gain.value = 9;
+  formant.gain.value = 5;
   carrier.connect(formant);
   octaveGain.connect(formant);
   formant.connect(envelope);
-  const peak = 0.75 * velocity;
+  const peak = 0.45 * velocity;
   envelope.gain.setValueAtTime(0, start);
   envelope.gain.linearRampToValueAtTime(peak, start + Math.min(0.12, duration * 0.2));
   envelope.gain.setValueAtTime(peak, start + Math.max(0.12, Math.min(duration * 0.6, 1.2)));
@@ -347,6 +402,11 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   let master: DynamicsCompressorNode | undefined;
   let bus: GainNode | undefined;
   let bells: GainNode | undefined;
+  /**
+   * Each section sums on its own bus through its own gentle compressor before
+   * the mix, so a cascade of moons ducks itself rather than the whole room.
+   */
+  let sections: Record<Role, GainNode> | undefined;
   let droneBus: GainNode | undefined;
   let output: GainNode | undefined;
   let dry: GainNode | undefined;
@@ -441,8 +501,11 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   function strikeWarble(start: number, velocity: number, decay: number) {
     const unit = ensureWarble();
     if (!unit) return;
-    unit.depth.gain.setValueAtTime(0.3 + 0.7 * velocity, start);
-    unit.depth.gain.setTargetAtTime(0, start, decay / 3);
+    // The depth eases in over a few cycles of the wobble rather than stepping:
+    // a step here lands on the drone's cutoff and detune and clicks.
+    const rise = 0.06;
+    unit.depth.gain.setTargetAtTime(0.15 + 0.45 * velocity, start, rise / 4);
+    unit.depth.gain.setTargetAtTime(0, start + rise, decay / 3);
   }
   /**
    * The ensemble's spread, 0 drawn in to 1 flung out, eased so the orchestration
@@ -471,12 +534,12 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   /** How loud each string of the chord is, bottom to top; the whole breathes with the tilt. */
   const DRONE_LEVELS = [0.04, 0.022, 0.02, 0.012];
   /** How far the warble bends one triangle of each drone string, in cents, at full depth. */
-  const DRONE_WARBLE_CENTS = 7;
+  const DRONE_WARBLE_CENTS = 3;
   /** How far the warble swings the drone's lowpass, as a share of its cutoff. */
-  const DRONE_WARBLE_SWING = 0.35;
+  const DRONE_WARBLE_SWING = 0.1;
   /** The same for the struck pad: its second triangle bends, its lowpass sweeps. */
-  const PAD_WARBLE_CENTS = 10;
-  const PAD_WARBLE_SWING = 0.3;
+  const PAD_WARBLE_CENTS = 4;
+  const PAD_WARBLE_SWING = 0.1;
   function updateFrame(
     pitchOffsets: Readonly<Record<string, number>>,
     time: number,
@@ -617,7 +680,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       glue.attack.value = 0.012;
       glue.release.value = 0.3;
       makeup = context.createGain();
-      makeup.gain.value = 1.7;
+      makeup.gain.value = 1.4;
       master = context.createDynamicsCompressor();
       master.threshold.value = -6;
       master.knee.value = 0;
@@ -629,9 +692,33 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       droneBus = context.createGain();
       bells.connect(bus);
       droneBus.connect(bus);
+      const section = (threshold: number, ratio: number, attack: number) => {
+        if (!context || !bells) throw new Error("Audio graph not built.");
+        const input = context.createGain();
+        const squeeze = context.createDynamicsCompressor();
+        squeeze.threshold.value = threshold;
+        squeeze.knee.value = 12;
+        squeeze.ratio.value = ratio;
+        squeeze.attack.value = attack;
+        squeeze.release.value = 0.18;
+        input.connect(squeeze);
+        squeeze.connect(bells);
+        return input;
+      };
+      sections = {
+        sun: section(-20, 3, 0.02),
+        planet: section(-22, 4, 0.006),
+        moon: section(-24, 4, 0.004),
+      };
       dry = context.createGain();
       wet = context.createGain();
       reverb = context.createConvolver();
+      // The limiter's attack lets the first two milliseconds of a transient
+      // through; a soft ceiling behind it bends those into the top instead of
+      // letting the converter clip them.
+      const ceiling = context.createWaveShaper();
+      ceiling.curve = softCeiling();
+      ceiling.oversample = "2x";
       output = context.createGain();
       // Post-compressor trim includes transient overshoot in the measured peak budget.
       output.gain.value = 0.85;
@@ -642,7 +729,8 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       wet.connect(glue);
       glue.connect(makeup);
       makeup.connect(master);
-      master.connect(output);
+      master.connect(ceiling);
+      ceiling.connect(output);
       output.connect(context.destination);
       context.onstatechange = () => {
         if (context?.state !== "running") {
@@ -749,7 +837,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     // Every tone darkens as it rings, the way a pedaled string loses its top first.
     filter.frequency.exponentialRampToValueAtTime(Math.max(120, frequency * 1.5), start + duration);
     envelope.connect(filter);
-    filter.connect(bells ?? bus);
+    filter.connect(sections?.[role] ?? bells ?? bus);
     const voice: Excitation = {
       start,
       end: start + duration,
