@@ -303,7 +303,9 @@ export function createBodies(options: BodiesOptions) {
     const length = Math.max(radius * 72, Math.min(150, umbra * 18));
     const dx = x / distance;
     const dz = z / distance;
-    const along = length / 2 - radius;
+    // The streak begins at the centroid: begun any further back, its near
+    // corners show past the silhouette on the sun's side.
+    const along = length / 2;
     // Through the equator: the streak crosses the body at its widest.
     const heading = -Math.atan2(dz, dx);
     shadow.position.set(x + dx * along, 0, z + dz * along);

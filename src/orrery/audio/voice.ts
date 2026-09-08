@@ -403,6 +403,18 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   let bus: GainNode | undefined;
   let bells: GainNode | undefined;
   /**
+   * The voice sum is scaled by one over the square root of how many voices are
+   * sounding, the way a Max patch multiplies each voice down by the count, so a
+   * cascade of moons is as loud as one moon rather than twelve of them.
+   */
+  let polyphony: GainNode | undefined;
+  function normalisePolyphony(now: number) {
+    if (!polyphony) return;
+    let sounding = 0;
+    for (const voice of voices) if (voice.start <= now + LOOKAHEAD && voice.end > now) sounding++;
+    polyphony.gain.setTargetAtTime(1 / Math.sqrt(Math.max(1, sounding)), now, 0.08);
+  }
+  /**
    * Each section sums on its own bus through its own gentle compressor before
    * the mix, so a cascade of moons ducks itself rather than the whole room.
    */
@@ -435,7 +447,8 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     if (dry) dry.gain.value = 1 - amount * 0.6;
     if (wet) wet.gain.value = amount;
     if (bells) bells.gain.value = mix.bells * 1.6;
-    if (droneBus) droneBus.gain.value = mix.drone;
+    // Squared so the slider is even to the ear: half is the house level, full is twice it.
+    if (droneBus) droneBus.gain.value = mix.drone ** 2 * 2;
   }
   const unsubscribeMix = sharedMix.subscribe(applyMix);
   let enabled = false;
@@ -547,6 +560,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     spreadNow = spread,
   ) {
     liveOffsets = pitchOffsets;
+    if (context) normalisePolyphony(context.currentTime);
     shades = [...shades, ...contacts.map((contact) => contact.shade)].slice(-16);
     spread += (Math.max(0, Math.min(1, spreadNow)) - spread) * 0.05;
     if (state.soundEnabled && state.activeView) updateDrone(time);
@@ -690,8 +704,9 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       bus = context.createGain();
       bells = context.createGain();
       droneBus = context.createGain();
-      bells.connect(bus);
-      droneBus.connect(bus);
+      polyphony = context.createGain();
+      bells.connect(polyphony);
+      polyphony.connect(bus);
       const section = (threshold: number, ratio: number, attack: number) => {
         if (!context || !bells) throw new Error("Audio graph not built.");
         const input = context.createGain();
@@ -725,6 +740,13 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       bus.connect(dry);
       dry.connect(glue);
       bus.connect(reverb);
+      // The drone is held, so sent whole it would load the room until its
+      // partials rang on their own; it goes dry, with a third of it to the hall.
+      droneBus.connect(dry);
+      const droneSend = context.createGain();
+      droneSend.gain.value = 0.35;
+      droneBus.connect(droneSend);
+      droneSend.connect(reverb);
       reverb.connect(wet);
       wet.connect(glue);
       glue.connect(makeup);
@@ -867,6 +889,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       }
     }
     voices.add(voice);
+    normalisePolyphony(start);
     const carrier = cast.oscillators[0];
     if (carrier) carrier.onended = () => release(voice);
     for (const oscillator of voice.oscillators) {

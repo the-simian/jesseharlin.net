@@ -1,3 +1,4 @@
+import type { Mix } from "../mix";
 import type { Body, InstrumentState, Ratio } from "./types";
 
 export type Preset = {
@@ -5,7 +6,12 @@ export type Preset = {
   name: string;
   caption: string;
   build: () => InstrumentState;
+  /** The levels this ensemble asks for; choosing it sets the mix. */
+  mix: Mix;
 };
+
+/** The house mix, until an ensemble is tuned away from it. */
+const HOUSE_MIX: Mix = { bells: 0.9, drone: 0.5, reverb: 0.4, decay: 1.5 };
 
 export function createEmptyState(): InstrumentState {
   return {
@@ -678,6 +684,7 @@ export const PRESETS: readonly Preset[] = [
     caption:
       "An old minor-key dance turns slowly under crossing bells and small, quick moons; a comet changes the key.",
     build: laFolia,
+    mix: { ...HOUSE_MIX },
   },
   {
     id: "lantern",
@@ -685,6 +692,7 @@ export const PRESETS: readonly Preset[] = [
     caption:
       "Four bright chords go round in a major key, the way a road bends home; the comet steps them along.",
     build: lanternRoad,
+    mix: { ...HOUSE_MIX },
   },
   {
     id: "well",
@@ -692,6 +700,7 @@ export const PRESETS: readonly Preset[] = [
     caption:
       "A slow bass line falls four steps and climbs back, under two singing rings and a comet.",
     build: wellPassacaglia,
+    mix: { ...HOUSE_MIX },
   },
   {
     id: "harbour",
@@ -699,12 +708,14 @@ export const PRESETS: readonly Preset[] = [
     caption:
       "A minor key seen from its bright side: the comet lands three notes up, then walks home.",
     build: coldHarbour,
+    mix: { ...HOUSE_MIX },
   },
   {
     id: "descent",
     name: "Slow descent",
     caption: "A bass that slips down by half steps under bright chords, then climbs back.",
     build: slowDescent,
+    mix: { ...HOUSE_MIX },
   },
   {
     id: "golden",
@@ -712,18 +723,21 @@ export const PRESETS: readonly Preset[] = [
     caption:
       "Rings spaced by the golden ratio, five notes that always agree, no key change; only the trading of notes.",
     build: goldenMean,
+    mix: { ...HOUSE_MIX },
   },
   {
     id: "ladder",
     name: "Ladder of fifths",
     caption: "Fifths stacked on fifths, bright and vast; the comet climbs the key by fifths.",
     build: ladder,
+    mix: { ...HOUSE_MIX },
   },
   {
     id: "empty",
     name: "Empty sky",
     caption: "A silent sun, ready for your own bodies, rings, and pitches.",
     build: createEmptyState,
+    mix: { ...HOUSE_MIX },
   },
 ];
 

@@ -4,6 +4,7 @@ import { Mixer } from "./controls/mixer";
 import { Presets } from "./controls/presets";
 import { OrreryLayout } from "./layout";
 import { sharedMix, useMix } from "./mix";
+import { PRESETS } from "./model/presets";
 import { useOrrery } from "./use-orrery";
 import { OrreryCanvas } from "./view/orrery-canvas";
 
@@ -57,10 +58,14 @@ export function OrreryScreen() {
         <Presets
           presets={orrery.presets}
           activeId={orrery.activePresetId}
-          onPick={orrery.applyPreset}
+          onPick={(id) => {
+            orrery.applyPreset(id);
+            const preset = PRESETS.find((candidate) => candidate.id === id);
+            if (preset) sharedMix.setMix(preset.mix);
+          }}
         />
       }
-      mixerZone={<Mixer mix={mix} onLevel={sharedMix.setLevel} />}
+      mixerZone={<Mixer mix={mix} presetId={orrery.activePresetId} onLevel={sharedMix.setLevel} />}
       consoleZone={
         <Console
           selected={orrery.selected}

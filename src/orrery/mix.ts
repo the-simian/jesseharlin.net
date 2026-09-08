@@ -2,9 +2,9 @@ import { useSyncExternalStore } from "react";
 
 /**
  * The mix: how loud each part of the instrument is, and how long notes ring.
- * Not part of the arrangement (a preset does not carry it), so it lives in its
- * own store, remembered per visitor. The view reads decay too: a body's trail
- * is as long as its note.
+ * It lives in its own store, remembered per visitor; an ensemble carries a
+ * mix of its own and sets it when chosen. The view reads decay too: a body's
+ * trail is as long as its note.
  */
 export type Mix = {
   /** Bells, the struck voices. 0 to 1. */
@@ -48,18 +48,28 @@ function load(): Mix {
 export function createMixStore() {
   let mix = load();
   const listeners = new Set<() => void>();
+  /** Replace whichever levels are given; the rest stay. */
+  function setMix(next: Partial<Mix>) {
+    const merged = { ...mix };
+    for (const key of Object.keys(MIX_RANGE) as (keyof Mix)[]) {
+      const value = next[key];
+      if (typeof value !== "number" || !Number.isFinite(value)) continue;
+      const range = MIX_RANGE[key];
+      merged[key] = Math.min(range.max, Math.max(range.min, value));
+    }
+    mix = merged;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(mix));
+    } catch {
+      // Storage may be unavailable; the mix still applies for this visit.
+    }
+    for (const listener of listeners) listener();
+  }
   return {
     getMix: () => mix,
-    setLevel(key: keyof Mix, value: number) {
-      const range = MIX_RANGE[key];
-      mix = { ...mix, [key]: Math.min(range.max, Math.max(range.min, value)) };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(mix));
-      } catch {
-        // Storage may be unavailable; the mix still applies for this visit.
-      }
-      for (const listener of listeners) listener();
-    },
+    setMix,
+    // Methods are handed around unbound, so nothing here may rely on `this`.
+    setLevel: (key: keyof Mix, value: number) => setMix({ [key]: value }),
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -68,6 +78,14 @@ export function createMixStore() {
 }
 
 export type MixStore = ReturnType<typeof createMixStore>;
+
+/** The mix as it would be written into an ensemble, for sharing. */
+export function describeMix(mix: Mix, presetId: string | null): string {
+  const rounded = Object.fromEntries(
+    (Object.keys(MIX_RANGE) as (keyof Mix)[]).map((key) => [key, Number(mix[key].toFixed(2))]),
+  );
+  return JSON.stringify({ preset: presetId, mix: rounded }, null, 2);
+}
 
 /** One mix for the page; the voice engine and the scene both read it. */
 export const sharedMix: MixStore = createMixStore();

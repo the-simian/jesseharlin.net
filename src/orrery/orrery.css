@@ -355,7 +355,7 @@
 
 .mixer-field {
   display: grid;
-  grid-template-columns: 7.5rem 1fr;
+  grid-template-columns: 8.5rem 1fr;
   align-items: center;
   gap: 0.6rem;
   font-size: 0.75rem;
@@ -365,10 +365,47 @@
   margin-top: 0.35rem;
 }
 
+.mixer-label {
+  min-width: 0;
+}
+
+.mixer-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.mixer-readout {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
 .mixer-label small {
   display: block;
   font-size: 0.65rem;
   opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mixer-copy {
+  margin-left: 0.7rem;
+  font: inherit;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--ui-line);
+  border-radius: 1rem;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.mixer-copy:hover {
+  opacity: 1;
 }
 
 .mixer-input {
