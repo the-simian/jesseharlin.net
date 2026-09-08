@@ -17,8 +17,7 @@ const LINKS = [
 
 export function OrreryScreen() {
   const orrery = useOrrery();
-  const mixStore = sharedMix;
-  const mix = useMix(mixStore);
+  const mix = useMix(sharedMix);
   return (
     <OrreryLayout
       view={orrery.state.activeView ?? "telescope"}
@@ -29,7 +28,7 @@ export function OrreryScreen() {
             runtime={orrery.runtime}
             reducedMotion={orrery.reducedMotion}
             onPick={orrery.pick}
-            mixStore={mixStore}
+            mixStore={sharedMix}
           />
         ) : null
       }
@@ -37,7 +36,7 @@ export function OrreryScreen() {
         <>
           <h1 className="name">Jesse Harlin</h1>
           <p className="name-line">
-            engineer, composer as <em>the_simian</em>, installation artist. Norman, Oklahoma.
+            engineer, composer (as <em>the_simian</em>), and installation artist. Norman, Oklahoma.
           </p>
         </>
       }
@@ -61,7 +60,7 @@ export function OrreryScreen() {
           onPick={orrery.applyPreset}
         />
       }
-      mixerZone={<Mixer mix={mix} onLevel={mixStore.setLevel} />}
+      mixerZone={<Mixer mix={mix} onLevel={sharedMix.setLevel} />}
       consoleZone={
         <Console
           selected={orrery.selected}

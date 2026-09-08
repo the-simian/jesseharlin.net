@@ -4,7 +4,7 @@ const LABELS: Record<keyof Mix, { name: string; note: string }> = {
   bells: { name: "Bells", note: "the struck voices" },
   drone: { name: "Drone", note: "the sun's hum" },
   reverb: { name: "Room", note: "how much the hall answers" },
-  decay: { name: "Ring", note: "how long a note and its trail last" },
+  decay: { name: "Tail", note: "how long a note and its trail last" },
 };
 
 /** Four sliders: the mix. Big enough to grab. */
@@ -30,6 +30,7 @@ export function Mixer({
             max={MIX_RANGE[key].max}
             step={MIX_RANGE[key].step}
             value={mix[key]}
+            aria-valuetext={key === "decay" ? `${mix[key]}×` : `${Math.round(mix[key] * 100)}%`}
             onChange={(event) => onLevel(key, Number(event.target.value))}
           />
         </label>

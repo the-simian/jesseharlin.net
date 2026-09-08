@@ -111,18 +111,20 @@ export function Console(props: ConsoleProps) {
               {props.bodyCount} of {LIMITS.maxBodies}
             </small>
           </span>
-          <select
-            className="field-input"
-            value={selected?.id ?? ""}
-            onChange={(event) => props.onSelect(event.target.value || null)}
-          >
-            <option value="">none selected</option>
-            {props.bodies.map((body) => (
-              <option key={body.id} value={body.id}>
-                {bodyName(body, props.bodies)}
-              </option>
-            ))}
-          </select>
+          <span className="field-select">
+            <select
+              className="field-input"
+              value={selected?.id ?? ""}
+              onChange={(event) => props.onSelect(event.target.value || null)}
+            >
+              <option value="">none selected</option>
+              {props.bodies.map((body) => (
+                <option key={body.id} value={body.id}>
+                  {bodyName(body, props.bodies)}
+                </option>
+              ))}
+            </select>
+          </span>
         </label>
       </div>
       {guidance}
@@ -167,17 +169,19 @@ function BodyEditor({
   const ring = isSun ? null : (
     <label className="field">
       <span className="field-label">Ring</span>
-      <select
-        className="field-input"
-        value={ringValue}
-        onChange={(event) => onRing(Number(event.target.value))}
-      >
-        {rings.map((value, index) => (
-          <option key={value} value={value}>
-            {RING_LABEL[index]}
-          </option>
-        ))}
-      </select>
+      <span className="field-select">
+        <select
+          className="field-input"
+          value={ringValue}
+          onChange={(event) => onRing(Number(event.target.value))}
+        >
+          {rings.map((value, index) => (
+            <option key={value} value={value}>
+              {RING_LABEL[index]}
+            </option>
+          ))}
+        </select>
+      </span>
     </label>
   );
   const ratioValue = `${body.speedRatio.numerator}/${body.speedRatio.denominator}`;
@@ -185,34 +189,38 @@ function BodyEditor({
   const speed = isSun ? null : (
     <label className="field">
       <span className="field-label">Speed</span>
-      <select
-        className="field-input"
-        value={ratioValue}
-        onChange={(event) => {
-          const [n, d] = event.target.value.split("/").map(Number);
-          if (n !== undefined && d !== undefined) onSpeed({ numerator: n, denominator: d });
-        }}
-      >
-        {LIMITS.allowedRatios.map((ratio) => (
-          <option key={RATIO_LABEL(ratio)} value={`${ratio.numerator}/${ratio.denominator}`}>
-            {RATIO_LABEL(ratio)}
-          </option>
-        ))}
-      </select>
+      <span className="field-select">
+        <select
+          className="field-input"
+          value={ratioValue}
+          onChange={(event) => {
+            const [n, d] = event.target.value.split("/").map(Number);
+            if (n !== undefined && d !== undefined) onSpeed({ numerator: n, denominator: d });
+          }}
+        >
+          {LIMITS.allowedRatios.map((ratio) => (
+            <option key={RATIO_LABEL(ratio)} value={`${ratio.numerator}/${ratio.denominator}`}>
+              {RATIO_LABEL(ratio)}
+            </option>
+          ))}
+        </select>
+      </span>
     </label>
   );
   const drift = isSun ? null : (
     <label className="field">
       <span className="field-label">Drift</span>
-      <select
-        className="field-input"
-        value={driftValue}
-        onChange={(event) => onDrift(driftFor(event.target.value))}
-      >
-        <option value="still">still</option>
-        <option value="stair">in steps</option>
-        <option value="sine">in waves</option>
-      </select>
+      <span className="field-select">
+        <select
+          className="field-input"
+          value={driftValue}
+          onChange={(event) => onDrift(driftFor(event.target.value))}
+        >
+          <option value="still">still</option>
+          <option value="stair">in steps</option>
+          <option value="sine">in waves</option>
+        </select>
+      </span>
     </label>
   );
   return (
@@ -225,17 +233,19 @@ function BodyEditor({
           {isSun ? "Pitch of everything" : "Pitch"}
           <small>{isSun ? " mirrored below" : " vs its parent, mirrored below"}</small>
         </span>
-        <select
-          className="field-input"
-          value={body.pitchOffsetSemitones}
-          onChange={(event) => onPitch(Number(event.target.value))}
-        >
-          {LIMITS.allowedOffsets.map((offset) => (
-            <option key={offset} value={offset}>
-              {OFFSET_LABEL[offset] ?? `${offset} semitones`}
-            </option>
-          ))}
-        </select>
+        <span className="field-select">
+          <select
+            className="field-input"
+            value={body.pitchOffsetSemitones}
+            onChange={(event) => onPitch(Number(event.target.value))}
+          >
+            {LIMITS.allowedOffsets.map((offset) => (
+              <option key={offset} value={offset}>
+                {OFFSET_LABEL[offset] ?? `${offset} semitones`}
+              </option>
+            ))}
+          </select>
+        </span>
       </label>
       {drift}
     </div>

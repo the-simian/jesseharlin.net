@@ -7,6 +7,9 @@
   --earth: #a84a32;
   --brass: #d9a520;
   --water: #3f5e73;
+  /* the pool: the same sky seen in still water */
+  --pool-sky: #050c0e;
+  --pool-fg: #d6efe9;
   --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: light;
@@ -14,6 +17,14 @@
 
 * {
   box-sizing: border-box;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 html {

@@ -36,8 +36,10 @@ export function Flip({ view, soundOn, onView, onSound }: FlipProps) {
             So below
           </button>
         </fieldset>
-        <button type="button" className="knob knob-sound" aria-pressed={soundOn} onClick={onSound}>
-          <span className="knob-glyph">{soundOn ? "◉" : "○"}</span>
+        <button type="button" className="knob knob-sound" data-on={soundOn} onClick={onSound}>
+          <span className="knob-glyph" aria-hidden="true">
+            {soundOn ? "◉" : "○"}
+          </span>
           <span className="knob-label">{soundOn ? "Mute sound" : "Enable sound"}</span>
         </button>
       </div>
