@@ -56,12 +56,15 @@ against that roll.
 
 ## Layout
 
-- `src/orrery/model/`: state, validation, pure commands, pitch resolution, the presets,
-  and the fixed-step simulation with swept disc contacts. Pure TypeScript; `bun test`.
+- `src/orrery/model/`: state, validation, pure commands, pitch resolution, the decay
+  curve, the presets, and the fixed-step simulation with swept disc contacts. Pure
+  TypeScript; `bun test`.
 - `src/orrery/audio/`: the voice engine. Web Audio voices scheduled against the audio
   clock with a short lookahead, a synthetic convolution reverb, and the drone.
-- `src/orrery/view/`: the Babylon scene and its React wrapper. Painted plates, glow,
-  volumetric rays from the sun, halos, trails, and the drifting camera.
+- `src/orrery/view/`: the Babylon scene and its React wrapper. `orrery-scene.ts` composes
+  `sky.ts` (painted plates and stars), `bodies.ts` (shells, halos, guides, trails, the
+  quiver), `effects.ts` (flashes and bursts), and `camera.ts` (the drifting rail), and owns
+  the lights, the glow, and the rays from the sun.
 - `src/orrery/controls/`: presets, the console, the flip, and the mixer, in plain words.
 - `src/orrery/mix.ts`: levels and ring time, remembered per visitor, read by audio and view.
 - `src/orrery/runtime.ts`: connects store, simulation, voice engine, and view. The picture
