@@ -1,3 +1,7 @@
+/**
+ * The voice engine: Web Audio voices scheduled ahead of the picture, cast by role,
+ * with a synthetic room and the sun's drone. Reads the mix; owns the audio graph.
+ */
 import { sharedMix } from "../mix";
 import { createInitialState } from "../model/commands";
 import { midiToHz, soundingPitch } from "../model/pitch";
@@ -6,7 +10,10 @@ import type { Contact, InstrumentState, ViewName } from "../model/types";
 import { validateState } from "../model/validate";
 
 const LOOKAHEAD = 0.1;
-/** Two arguments retain the B-flat register envelope; audio supplies mass, speed, and anchor. */
+/**
+ * With only (midi, velocity) this keeps the original B-flat register envelope; the
+ * engine also passes weight, closing speed, and the anchor.
+ */
 export function decayFor(
   midi: number,
   velocity: number,

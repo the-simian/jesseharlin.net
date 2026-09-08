@@ -656,26 +656,28 @@ export const PRESETS: readonly Preset[] = [
     id: "lily-pads",
     name: "Celestial lily pads",
     caption:
-      "An old minor-key dance turns slowly under crossing bells and small, quick moons; a comet turns the key.",
+      "An old minor-key dance turns slowly under crossing bells and small, quick moons; a comet changes the key.",
     build: laFolia,
   },
   {
     id: "lantern",
     name: "Lantern road",
     caption:
-      "Four bright chords go round in a major key, the way a road bends home; the comet turns them.",
+      "Four bright chords go round in a major key, the way a road bends home; the comet steps them along.",
     build: lanternRoad,
   },
   {
     id: "well",
     name: "The sunken well",
-    caption: "A slow ground falls four steps and climbs back, under two singing rails and a comet.",
+    caption:
+      "A slow bass line falls four steps and climbs back, under two singing rings and a comet.",
     build: wellPassacaglia,
   },
   {
     id: "harbour",
     name: "Cold harbour",
-    caption: "The bright side of a minor road: the comet lands on the third, then walks home.",
+    caption:
+      "A minor key seen from its bright side: the comet lands three notes up, then walks home.",
     build: coldHarbour,
   },
   {

@@ -1,6 +1,6 @@
 # jesseharlin.net
 
-Jesse Harlin's personal site. The page is an instrument.
+Jesse Harlin's personal site, live at https://jesseharlin.net/. The page is an instrument.
 
 Bodies orbit bodies on Kepler ellipses at quantized speed ratios. The only sound is
 collision: when two discs touch, both ring. Pitch offsets accumulate down the parent
@@ -23,11 +23,11 @@ inverted around the anchor. One simulation, two views.
   one wins.
 - **Ovals cross.** Sibling rings share a semi-major axis and eccentricity but not an
   orientation, so their paths intersect at uneven speeds. Retrograde bodies meet head-on.
-- **A body wears its note.** Register sets the colour temperature and the halo; a struck
+- **A body wears its note.** Register sets the color temperature and the halo; a struck
   body quivers for exactly as long as its note rings; trails are as long as the mix's ring.
-
-Voices are cast by role: heavy slow bodies are gongs, middle bodies are pedaled strings,
-small quick bodies are bright plinks, and the sun hums a drone an octave under its note.
+- **A body plays its weight.** Heavy slow bodies are gongs, middle bodies are pedaled
+  strings, small quick bodies are bright plinks, and the sun hums a drone an octave under
+  its note.
 
 ## Stack
 
@@ -67,7 +67,7 @@ against that roll.
 - `src/orrery/runtime.ts`: connects store, simulation, voice engine, and view. The picture
   runs a tenth of a second behind the audio so flashes land on notes.
 - `scripts/score.ts`: the offline renderer described above.
-- `src/tower/`: a parked reading surface about Jesse, reachable at `#tower`.
+- `src/tower/`: the bio, shelved as floors of a tower; reachable at `#tower`.
 
 ## Composing a preset
 

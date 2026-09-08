@@ -1,3 +1,7 @@
+/**
+ * The Babylon scene: painted plates, glow, rays, halos, trails, and the drifting
+ * camera. Reads RenderFrame and the store; owns no instrument state.
+ */
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer";
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import { Engine } from "@babylonjs/core/Engines/engine";

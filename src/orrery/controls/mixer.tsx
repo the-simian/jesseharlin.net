@@ -7,7 +7,7 @@ const LABELS: Record<keyof Mix, { name: string; note: string }> = {
   decay: { name: "Ring", note: "how long a note and its trail last" },
 };
 
-/** Four sliders: the mix. Big enough to grab; labelled in plain words. */
+/** Four sliders: the mix. Big enough to grab. */
 export function Mixer({
   mix,
   onLevel,

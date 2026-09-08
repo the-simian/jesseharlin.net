@@ -62,7 +62,7 @@ function bodyName(body: Body, bodies: Body[]): string {
     : `moon ${index} of ${bodyName(parent as Body, bodies)}`;
 }
 
-/** The instrument's controls, in plain words. Big targets; nothing hidden behind a gesture. */
+/** The instrument's controls. Big targets; nothing hidden behind a gesture. */
 export function Console(props: ConsoleProps) {
   const { selected, moonTarget } = props;
   const moonNote = moonTarget
