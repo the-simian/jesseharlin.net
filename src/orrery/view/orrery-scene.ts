@@ -89,8 +89,9 @@ export function createOrreryScene(
   for (const light of [hemi, key, sunLight]) light.specular.set(0, 0, 0);
 
   const glow = new GlowLayer("glow", scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
-  const dust = createDust(scene, rail.camera);
-  const sky = createSky(scene, engine, dust);
+  const sky = createSky(scene, engine);
+  // After the sky: the dust's layer sits over the plate.
+  const dust = createDust(scene, engine, rail.camera);
   const effects = createEffects(scene, glow, reducedMotion);
   const root = new TransformNode("orrery", scene);
   let rays: VolumetricLightScatteringPostProcess | null = null;
@@ -143,6 +144,7 @@ export function createOrreryScene(
     selectionRing.color = palette.selection;
     bodies.retint(lastState, palette, view);
     sky.setView(view);
+    dust.setView(view);
   }
 
   function setView(next: ViewName) {
@@ -162,7 +164,7 @@ export function createOrreryScene(
     if (extent !== lastReach) {
       lastReach = extent;
       rail.setReach(extent);
-      sky.setReach(extent);
+      dust.setReach(extent);
     }
   }
 
