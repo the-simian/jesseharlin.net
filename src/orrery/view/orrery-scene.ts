@@ -17,6 +17,7 @@ import type { OrreryRuntime, RenderFrame } from "../runtime";
 import type { OrreryStore } from "../store";
 import { createBodies } from "./bodies";
 import { createRail } from "./camera";
+import { createDust } from "./dust";
 import { createEffects, unitCircle } from "./effects";
 import { PALETTES, type Palette } from "./palette";
 import { createSky } from "./sky";
@@ -76,7 +77,6 @@ export function createOrreryScene(
   const reducedMotion = () => options.reducedMotion;
 
   const rail = createRail(scene, engine, canvas, reducedMotion);
-  const sky = createSky(scene, engine);
 
   // The sun is the light; the rest is fill so the far side of a body is not black.
   const hemi = new HemisphericLight("hemi", new Vector3(0, 1, 0), scene);
@@ -89,6 +89,8 @@ export function createOrreryScene(
   for (const light of [hemi, key, sunLight]) light.specular.set(0, 0, 0);
 
   const glow = new GlowLayer("glow", scene, { blurKernelSize: 32, mainTextureRatio: 0.5 });
+  const dust = createDust(scene, rail.camera);
+  const sky = createSky(scene, engine, dust);
   const effects = createEffects(scene, glow, reducedMotion);
   const root = new TransformNode("orrery", scene);
   let rays: VolumetricLightScatteringPostProcess | null = null;
@@ -97,11 +99,12 @@ export function createOrreryScene(
     root,
     glow,
     mixStore,
+    dust,
     reducedMotion,
     onSun(mesh) {
       // The sun is the source of the rays; everything else stands in them.
       rays?.dispose(rail.camera);
-      rays = new VolumetricLightScatteringPostProcess("rays", 1, rail.camera, mesh, 40);
+      rays = new VolumetricLightScatteringPostProcess("rays", 1, rail.camera, mesh, 60);
       rays.exposure = 0.16;
       rays.decay = 0.965;
       rays.weight = 0.5;
@@ -129,6 +132,10 @@ export function createOrreryScene(
   function applyPalette() {
     palette = PALETTES[view];
     scene.clearColor = palette.clear;
+    // A whisper of fog: the far ends of the streaks and the outer planets sink a little.
+    scene.fogMode = Scene.FOGMODE_EXP;
+    scene.fogDensity = palette.fog;
+    scene.fogColor.set(palette.clear.r, palette.clear.g, palette.clear.b);
     hemi.diffuse = palette.ambientUp;
     hemi.groundColor = palette.ambientDown;
     sunLight.diffuse = palette.sunGlow;
@@ -155,6 +162,7 @@ export function createOrreryScene(
     if (extent !== lastReach) {
       lastReach = extent;
       rail.setReach(extent);
+      sky.setReach(extent);
     }
   }
 
@@ -208,6 +216,7 @@ export function createOrreryScene(
     }
 
     rail.tick(dt);
+    dust.tick();
     sky.parallax(rail.parallax.x, rail.parallax.y);
   }
 
@@ -227,11 +236,30 @@ export function createOrreryScene(
   sync(lastState);
   applyPalette();
 
+  /**
+   * The frame budget. A device that cannot hold the frame rate for a few seconds
+   * running loses the shadows for the rest of the visit; they are the first
+   * thing that can go without the picture losing its sense.
+   */
+  const SLOW_FPS = 40;
+  const SLOW_SECONDS = 4;
+  let slowFor = 0;
+  let shadows = true;
+  function watchBudget(dt: number) {
+    if (!shadows) return;
+    slowFor = engine.getFps() < SLOW_FPS ? slowFor + dt : 0;
+    if (slowFor >= SLOW_SECONDS) {
+      shadows = false;
+      bodies.setShadows(false);
+    }
+  }
+
   let lastNow = performance.now();
   function renderFrame() {
     const now = performance.now();
     const dt = Math.min((now - lastNow) / 1000, 0.1);
     lastNow = now;
+    watchBudget(dt);
     const state = store.getState();
     if (state !== lastState) {
       lastState = state;
@@ -272,6 +300,7 @@ export function createOrreryScene(
       engine.stopRenderLoop();
       sky.dispose();
       bodies.dispose();
+      dust.dispose();
       rail.dispose();
       scene.dispose();
       engine.dispose();

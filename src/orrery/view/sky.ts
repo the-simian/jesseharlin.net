@@ -1,5 +1,9 @@
 import type { Engine } from "@babylonjs/core/Engines/engine";
+import { Engine as BlendEngine } from "@babylonjs/core/Engines/engine";
 import { Layer } from "@babylonjs/core/Layers/layer";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import "@babylonjs/core/Shaders/layer.fragment";
 import "@babylonjs/core/Shaders/layer.vertex";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -8,12 +12,16 @@ import { PointsCloudSystem } from "@babylonjs/core/Particles/pointsCloudSystem";
 import type { VolumetricLightScatteringPostProcess } from "@babylonjs/core/PostProcesses/volumetricLightScatteringPostProcess";
 import type { Scene } from "@babylonjs/core/scene";
 import type { ViewName } from "../model/types";
+import type { Dust } from "./dust";
 import { PALETTES } from "./palette";
+import { createHaze } from "./textures";
 
 /**
- * The sky behind the arrangement: one painted plate per view, and a seeded
- * shell of stars in front of it so the plate has grain. The plate slides a
- * little against the camera so it reads as far away rather than pasted on.
+ * The sky behind the arrangement: one painted plate per view, a seeded shell
+ * of stars in front of it so the plate has grain, and a haze on the orbital
+ * plane around the sun, drawn in the dust pass, that the bodies' shadows are
+ * cut from. The plate slides a little against the camera so it reads as far
+ * away rather than pasted on.
  */
 
 const STAR_COUNT = 1600;
@@ -27,8 +35,27 @@ function seeded(seed: number): () => number {
   };
 }
 
-export function createSky(scene: Scene, engine: Engine) {
+export function createSky(scene: Scene, engine: Engine, dust: Dust) {
   let disposed = false;
+  const hazeTexture = createHaze(scene);
+  const hazeMaterial = new StandardMaterial("haze-material", scene);
+  hazeMaterial.disableLighting = true;
+  hazeMaterial.diffuseColor = Color3.Black();
+  hazeMaterial.specularColor = Color3.Black();
+  hazeMaterial.emissiveTexture = hazeTexture;
+  hazeMaterial.opacityTexture = hazeTexture;
+  hazeMaterial.alphaMode = BlendEngine.ALPHA_ADD;
+  hazeMaterial.backFaceCulling = false;
+  hazeMaterial.disableDepthWrite = true;
+  hazeMaterial.fogEnabled = false;
+  hazeMaterial.alpha = 0.5;
+  const haze = CreateGround("haze", { width: 1, height: 1 }, scene);
+  haze.material = hazeMaterial;
+  haze.isPickable = false;
+  haze.position.y = -0.002;
+  // First in the dust pass, so the shadows are cut from it.
+  haze.alphaIndex = -2;
+  dust.add(haze);
   const plates: Record<ViewName, Layer> = {
     telescope: new Layer("plate-above", PALETTES.telescope.plate, scene, true),
     pool: new Layer("plate-below", PALETTES.pool.plate, scene, true),
@@ -77,6 +104,8 @@ export function createSky(scene: Scene, engine: Engine) {
           return;
         }
         mesh.isPickable = false;
+        // Stars are far; fog would put them out.
+        if (mesh.material) mesh.material.fogEnabled = false;
         rays?.excludedMeshes.push(mesh);
         starMeshes.push(mesh);
       })
@@ -89,6 +118,12 @@ export function createSky(scene: Scene, engine: Engine) {
     setView(view: ViewName) {
       current = view;
       for (const [name, plate] of Object.entries(plates)) plate.isEnabled = name === view;
+      hazeMaterial.emissiveColor = PALETTES[view].haze;
+    },
+    /** The haze reaches well past the farthest orbit. */
+    setReach(extent: number) {
+      const diameter = Math.max(24, extent * 3.2);
+      haze.scaling.set(diameter, 1, diameter);
     },
     /** Slide the current plate; the composer feeds it the camera's drift. */
     parallax(x: number, y: number) {
@@ -103,6 +138,10 @@ export function createSky(scene: Scene, engine: Engine) {
       disposed = true;
       for (const mesh of starMeshes) mesh.dispose();
       for (const plate of Object.values(plates)) plate.dispose();
+      dust.remove(haze);
+      haze.dispose();
+      hazeMaterial.dispose();
+      hazeTexture.dispose();
     },
   };
 }

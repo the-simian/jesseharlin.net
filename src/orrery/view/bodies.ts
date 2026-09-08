@@ -3,8 +3,10 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import type { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import { CreateLines } from "@babylonjs/core/Meshes/Builders/linesBuilder";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
@@ -19,8 +21,9 @@ import { decayCurve } from "../model/decay";
 import { soundingPitch } from "../model/pitch";
 import { depthOf } from "../model/tree";
 import type { Body, BodyId, BodyPosition, InstrumentState, ViewName } from "../model/types";
+import type { Dust } from "./dust";
 import type { Palette } from "./palette";
-import { createSoftDisc, createSurfaceCache } from "./textures";
+import { createShadowWedge, createSoftDisc, createSurfaceCache } from "./textures";
 
 /**
  * The bodies as drawn. Each is a translucent shell with a fresnel rim over a
@@ -31,6 +34,12 @@ import { createSoftDisc, createSurfaceCache } from "./textures";
  * A body wears its note: register sets the temperature of its light, pitch
  * class turns the hue a little, and a struck body quivers for as long as the
  * note rings. Low notes throw a wide dim halo; high notes a small bright one.
+ *
+ * Each orbiting body owns its shadow: a long streak on the plane pointing away
+ * from the sun, starting inside the body so it meets the body's sides, cut out
+ * of the lit dust in the dust pass and nothing else. No light is traced; the
+ * body carries the shadow with it. The composer can switch the shadows off on
+ * a slow device.
  */
 
 /** Painted surfaces, by depth, served from public/planets. Planets alternate. */
@@ -40,6 +49,11 @@ const SURFACES = {
 };
 /** Trail length in samples at a ring multiplier of one; one sample per rendered frame. */
 const TRAIL_SAMPLES = 80;
+/** How much of the lit dust a streak takes at rest; a struck body's streak flickers around it. */
+const SHADOW_DARKNESS = 0.85;
+/** The penumbra: wider, and much fainter. */
+const PENUMBRA_DARKNESS = 0.3;
+const PENUMBRA_WIDTH = 1.45;
 
 /** A struck body's shape rings down with its note. */
 type Ringing = {
@@ -67,6 +81,9 @@ export type BodyVisual = {
   haloMaterial: StandardMaterial;
   orbit: Mesh | null;
   orbitMaterial: StandardMaterial | null;
+  shadow: Mesh | null;
+  shadowMaterial: StandardMaterial | null;
+  penumbra: Mesh | null;
   depth: number;
   /** The colour of this body's light, from its pitch. */
   light: Color3;
@@ -98,15 +115,47 @@ export type BodiesOptions = {
   root: TransformNode;
   glow: GlowLayer;
   mixStore: MixStore;
+  dust: Dust;
   reducedMotion: () => boolean;
   /** Called when the sun's mesh is created, so the composer can hang the rays on it. */
   onSun: (mesh: Mesh) => VolumetricLightScatteringPostProcess | null;
 };
 
 export function createBodies(options: BodiesOptions) {
-  const { scene, root, glow, mixStore } = options;
+  const { scene, root, glow, mixStore, dust } = options;
   const visuals = new Map<BodyId, BodyVisual>();
   const haloTexture = createSoftDisc(scene, "halo", 0.18);
+  const wedgeTexture = createShadowWedge(scene);
+  const penumbraTexture = createShadowWedge(scene, true);
+  /**
+   * A streak is black laid over the lit dust with the wedge as its opacity; in
+   * the dust pass that takes the dust away and touches nothing else. One
+   * painted wedge is shared by every streak; each umbra has its own material so
+   * it can flicker alone. Built, not cloned: a cloned dynamic texture is blank.
+   */
+  function createShadowMaterial(
+    name: string,
+    darkness: number,
+    mask: DynamicTexture = wedgeTexture,
+  ): StandardMaterial {
+    const material = new StandardMaterial(name, scene);
+    material.disableLighting = true;
+    material.diffuseColor = Color3.Black();
+    material.specularColor = Color3.Black();
+    material.emissiveColor = Color3.Black();
+    material.opacityTexture = mask;
+    material.backFaceCulling = false;
+    material.disableDepthWrite = true;
+    material.fogEnabled = false;
+    material.alpha = darkness;
+    return material;
+  }
+  const penumbraMaterial = createShadowMaterial(
+    "penumbra-material",
+    PENUMBRA_DARKNESS,
+    penumbraTexture,
+  );
+  let shadowsOn = true;
   const surface = createSurfaceCache(scene);
   let rays: VolumetricLightScatteringPostProcess | null = null;
   let byId = new Map<BodyId, Body>();
@@ -116,7 +165,8 @@ export function createBodies(options: BodiesOptions) {
     mesh.parent = root;
     const material = new StandardMaterial(`${body.id}-material`, scene);
     material.specularColor = Color3.Black();
-    material.alpha = depth === 0 ? 0.95 : 0.78;
+    // Bodies are near opaque so their shadows meet their sides; the rim keeps the glass.
+    material.alpha = depth === 0 ? 0.95 : 0.94;
     material.emissiveFresnelParameters = new FresnelParameters({
       bias: 0.25,
       power: 2.2,
@@ -124,7 +174,7 @@ export function createBodies(options: BodiesOptions) {
       rightColor: Color3.Black(),
     });
     material.opacityFresnelParameters = new FresnelParameters({
-      bias: 0.55,
+      bias: 0.85,
       power: 1.5,
       leftColor: Color3.White(),
       rightColor: Color3.Black(),
@@ -163,6 +213,9 @@ export function createBodies(options: BodiesOptions) {
       haloMaterial,
       orbit: null,
       orbitMaterial: null,
+      shadow: null,
+      shadowMaterial: null,
+      penumbra: null,
       depth,
       light: Color3.White(),
       register: 0.5,
@@ -191,6 +244,78 @@ export function createBodies(options: BodiesOptions) {
     orbit.material = material;
     visual.orbit = orbit;
     visual.orbitMaterial = material;
+  }
+
+  function createShadow(body: Body, visual: BodyVisual) {
+    const shadow = CreateGround(`${body.id}-shadow`, { width: 1, height: 1 }, scene);
+    shadow.parent = root;
+    shadow.isPickable = false;
+    const material = createShadowMaterial(`${body.id}-shadow-material`, SHADOW_DARKNESS);
+    shadow.material = material;
+    visual.shadowMaterial = material;
+    shadow.isVisible = shadowsOn;
+    // After the haze in the dust pass, so it is cut from it.
+    shadow.alphaIndex = 0;
+    dust.add(shadow);
+    visual.shadow = shadow;
+    const penumbra = CreateGround(`${body.id}-penumbra`, { width: 1, height: 1 }, scene);
+    penumbra.parent = root;
+    penumbra.isPickable = false;
+    penumbra.material = penumbraMaterial;
+    penumbra.isVisible = shadowsOn;
+    penumbra.alphaIndex = -1;
+    dust.add(penumbra);
+    visual.penumbra = penumbra;
+  }
+
+  /**
+   * Point the streak away from the sun. Its length grows with the umbra, a body
+   * of radius r at distance d from a sun of radius R throwing a cone d r / (R - r)
+   * long, but it is drawn far longer than the cone, the way a streak of shadow
+   * reads across a floor. It starts a radius behind the body's centre, so it
+   * is exactly as wide as the body where it meets the body's sides.
+   *
+   * The streak never moves with a strike, but it flickers: its alpha rises and
+   * falls at the same period as the ripple running over the body, and settles
+   * as the note dies.
+   */
+  function castShadow(visual: BodyVisual, x: number, z: number, sunRadius: number) {
+    const shadow = visual.shadow;
+    const penumbra = visual.penumbra;
+    if (!shadow || !penumbra) return;
+    const distance = Math.hypot(x, z);
+    const radius = visual.mesh.scaling.x / 2;
+    if (distance < 1e-6 || radius <= 0) {
+      shadow.isVisible = false;
+      penumbra.isVisible = false;
+      return;
+    }
+    shadow.isVisible = shadowsOn;
+    penumbra.isVisible = shadowsOn;
+    const umbra =
+      sunRadius > radius ? (distance * radius) / (sunRadius - radius) : Number.POSITIVE_INFINITY;
+    const length = Math.max(radius * 72, Math.min(150, umbra * 18));
+    const dx = x / distance;
+    const dz = z / distance;
+    const along = length / 2 - radius;
+    // Through the equator: the streak crosses the body at its widest.
+    const heading = -Math.atan2(dz, dx);
+    shadow.position.set(x + dx * along, 0, z + dz * along);
+    shadow.rotation.y = heading;
+    // A touch under the diameter: the soft edge must end inside the silhouette.
+    shadow.scaling.set(length, 1, radius * 1.9);
+    penumbra.position.set(x + dx * along, 0, z + dz * along);
+    penumbra.rotation.y = heading;
+    penumbra.scaling.set(length, 1, radius * 1.9 * PENUMBRA_WIDTH);
+    const ring = visual.ring;
+    if (visual.shadowMaterial) {
+      const envelope = ring ? ring.amplitude * Math.exp((-3 * ring.age) / ring.decaySeconds) : 0;
+      const wave = ring ? Math.sin(ring.age * 18 + ring.phase) : 0;
+      visual.shadowMaterial.alpha = Math.max(
+        0.3,
+        Math.min(1, SHADOW_DARKNESS + envelope * 2 * wave),
+      );
+    }
   }
 
   function tint(
@@ -327,6 +452,11 @@ export function createBodies(options: BodiesOptions) {
     visual.haloMaterial.dispose();
     visual.orbit?.dispose();
     visual.orbitMaterial?.dispose();
+    if (visual.shadow) dust.remove(visual.shadow);
+    if (visual.penumbra) dust.remove(visual.penumbra);
+    visual.shadow?.dispose();
+    visual.shadowMaterial?.dispose();
+    visual.penumbra?.dispose();
     visual.trail?.mesh.dispose();
   }
 
@@ -350,6 +480,7 @@ export function createBodies(options: BodiesOptions) {
         // smaller inside its halo, so orbits read as clearing it.
         visual.mesh.scaling.setAll(body.discRadius * (depth === 0 ? 1.2 : 2));
         if (body.parentId !== null && !visual.orbit) createOrbit(body, visual);
+        if (body.parentId !== null && !visual.shadow) createShadow(body, visual);
         tint(visual, body.id, state, palette, view);
       }
       for (const [id, visual] of visuals) {
@@ -365,12 +496,16 @@ export function createBodies(options: BodiesOptions) {
     /** Move every body to its delayed position and let struck bodies ring. */
     place(positions: Map<BodyId, BodyPosition>, dt: number) {
       const moving = !options.reducedMotion();
+      let sunRadius = 0;
+      for (const visual of visuals.values())
+        if (visual.depth === 0) sunRadius = visual.mesh.scaling.x / 2;
       for (const [id, visual] of visuals) {
         const position = positions.get(id);
         const body = byId.get(id);
         if (!position || !body) continue;
         visual.mesh.position.set(position.x, 0, position.y);
         visual.halo.position.set(position.x, 0, position.y);
+        if (visual.shadow) castShadow(visual, position.x, position.y, sunRadius);
         if (moving && body.parentId !== null) trace(visual, position.x, position.y);
         visual.struck += dt;
         const pulse = Math.exp(-visual.struck * 3);
@@ -404,9 +539,20 @@ export function createBodies(options: BodiesOptions) {
       if (visual) strike(visual, midi, intensity, anchorMidi);
     },
     body: (id: BodyId) => byId.get(id),
+    /** Shadows are the first thing to go on a slow device. */
+    setShadows(on: boolean) {
+      shadowsOn = on;
+      for (const visual of visuals.values()) {
+        if (visual.shadow) visual.shadow.isVisible = on;
+        if (visual.penumbra) visual.penumbra.isVisible = on;
+      }
+    },
     dispose() {
       for (const visual of visuals.values()) dispose(visual);
       visuals.clear();
+      penumbraMaterial.dispose();
+      wedgeTexture.dispose();
+      penumbraTexture.dispose();
     },
   };
 }

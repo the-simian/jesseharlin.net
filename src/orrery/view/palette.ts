@@ -29,6 +29,10 @@ export type Palette = {
   /** Light of the lowest and highest registers; a body's light sits between them. */
   warm: Color3;
   cool: Color3;
+  /** The haze on the orbital plane that the shadows are cut from. */
+  haze: Color3;
+  /** How thick the fog is, per unit of distance. */
+  fog: number;
 };
 
 const hex = (value: string) => Color3.FromHexString(value);
@@ -53,6 +57,8 @@ export const PALETTES: Record<ViewName, Palette> = {
     glow: 0.9,
     warm: hex("#ff7a2a"),
     cool: hex("#bfe0ff"),
+    haze: hex("#7a5a2c"),
+    fog: 0.012,
   },
   pool: {
     clear: Color4.FromHexString("#050c0eff"),
@@ -73,5 +79,7 @@ export const PALETTES: Record<ViewName, Palette> = {
     glow: 1.1,
     warm: hex("#c9a25a"),
     cool: hex("#8ff0ff"),
+    haze: hex("#1f4a44"),
+    fog: 0.016,
   },
 };
