@@ -1,0 +1,3 @@
+[test]
+# Two presets simulate minutes at 240 Hz; the CI runner needs more than five seconds.
+timeout = 30000
