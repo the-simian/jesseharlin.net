@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { createVoiceEngine, decayFor, reverbImpulse } from "../audio/voice";
+import { createVoiceEngine, decayFor, reverbImpulse, WOBBLE_RATE } from "../audio/voice";
 import { sharedMix } from "../mix";
 import { addBody, applyPreset, setActiveView, setSoundEnabled } from "./commands";
 import { midiToHz } from "./pitch";
@@ -148,6 +148,12 @@ test("audio merges dyads, caps new voices, mirrors pool pitch, and cancels witho
     assert(
       drones.length >= 8 && drones.every((oscillator) => oscillator.starts[0] === 10),
       "The drone is a chord of at least four strings, each at least two oscillators.",
+    );
+    assert(
+      drones.some(
+        (oscillator) => Math.abs(oscillator.frequency.value - WOBBLE_RATE / (2 * Math.PI)) < 1e-9,
+      ),
+      "The warble's sine runs at the sphere's wobble rate.",
     );
     engine.updateFrame({ sun: 7 }, 1, []);
     const litCutoff = filters[0]?.frequency.targets.at(-1) ?? 0;

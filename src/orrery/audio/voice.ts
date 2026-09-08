@@ -62,7 +62,15 @@ interface Excitation {
   end: number;
   oscillators: OscillatorNode[];
   nodes: AudioNode[];
+  /** Undo any connection made into the voice from outside it. */
+  unplug?: () => void;
 }
+
+/**
+ * The struck sun's warble follows its wobble: the sphere's ripple runs at this
+ * rate, in radians per second, and its swell decays by e^(-3t / decay).
+ */
+export const WOBBLE_RATE = 18;
 
 /** Where a body sits in the tree decides its section. */
 export type Role = "sun" | "planet" | "moon";
@@ -286,6 +294,54 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     | undefined;
   let shades: number[] = [];
   /**
+   * The warble: one sine, at the wobble's rate, whose depth is thrown up by a
+   * strike on the sun and decays as the sphere settles. It leans on the pitch
+   * of one triangle in each pair and on the lowpass, so what is seen is heard.
+   */
+  let warble:
+    | {
+        lfo: OscillatorNode;
+        depth: GainNode;
+        droneDetune: GainNode;
+        droneCutoff: GainNode;
+      }
+    | undefined;
+  /** The drone's lowpass as last set, so the warble's swing can scale with it. */
+  let droneCutoff = 400;
+  function ensureWarble() {
+    if (warble || !context) return warble;
+    const now = context.currentTime;
+    const lfo = context.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = WOBBLE_RATE / (2 * Math.PI);
+    const depth = context.createGain();
+    depth.gain.value = 0;
+    const droneDetune = context.createGain();
+    droneDetune.gain.value = DRONE_WARBLE_CENTS;
+    const droneCutoffGain = context.createGain();
+    droneCutoffGain.gain.value = droneCutoff * DRONE_WARBLE_SWING;
+    lfo.connect(depth);
+    depth.connect(droneDetune);
+    depth.connect(droneCutoffGain);
+    lfo.start(now);
+    warble = { lfo, depth, droneDetune, droneCutoff: droneCutoffGain };
+    return warble;
+  }
+  function stopWarble() {
+    if (!warble) return;
+    warble.lfo.stop();
+    for (const node of [warble.lfo, warble.depth, warble.droneDetune, warble.droneCutoff])
+      node.disconnect();
+    warble = undefined;
+  }
+  /** A strike on the sun sets the warble swinging; it settles as the sphere does. */
+  function strikeWarble(start: number, velocity: number, decay: number) {
+    const unit = ensureWarble();
+    if (!unit) return;
+    unit.depth.gain.setValueAtTime(0.3 + 0.7 * velocity, start);
+    unit.depth.gain.setTargetAtTime(0, start, decay / 3);
+  }
+  /**
    * The ensemble's spread, 0 drawn in to 1 flung out, eased so the orchestration
    * tilts rather than jumps: the sun's pad and drone warm and open as the bodies
    * draw in; the moons brighten and thin as they fly out.
@@ -302,6 +358,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     drone.filter.disconnect();
     drone.gain.disconnect();
     drone = undefined;
+    stopWarble();
   }
   /** The chord's intervals from the sun's note, with the tenth taken from the scale. */
   function droneIntervals(): number[] {
@@ -310,6 +367,13 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
   }
   /** How loud each string of the chord is, bottom to top; the whole breathes with the tilt. */
   const DRONE_LEVELS = [0.04, 0.022, 0.02, 0.012];
+  /** How far the warble bends one triangle of each drone string, in cents, at full depth. */
+  const DRONE_WARBLE_CENTS = 7;
+  /** How far the warble swings the drone's lowpass, as a share of its cutoff. */
+  const DRONE_WARBLE_SWING = 0.35;
+  /** The same for the struck pad: its second triangle bends, its lowpass sweeps. */
+  const PAD_WARBLE_CENTS = 10;
+  const PAD_WARBLE_SWING = 0.3;
   function updateFrame(
     pitchOffsets: Readonly<Record<string, number>>,
     time: number,
@@ -352,6 +416,8 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       gain.gain.setValueAtTime(0, now);
       gain.gain.linearRampToValueAtTime(0.7 + 0.6 * near, now + 2.5);
       const nodes: AudioNode[] = [rumble, hum];
+      const swing = ensureWarble();
+      swing?.droneCutoff.connect(filter.frequency);
       const strings = droneIntervals().map((interval, index) => {
         const frequency = midiToHz(midi + interval);
         const level = audio.createGain();
@@ -370,6 +436,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
           oscillator.type = part.type;
           oscillator.frequency.value = frequency;
           oscillator.detune.value = part.cents;
+          if (part.cents > 0) swing?.droneDetune.connect(oscillator.detune);
           if (part.gain === 1) oscillator.connect(level);
           else {
             const bow = audio.createGain();
@@ -406,6 +473,8 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       (1 - 0.6 * shade);
     drone.filter.frequency.setTargetAtTime(cutoff, now, 2);
     drone.gain.gain.setTargetAtTime(0.7 + 0.6 * near, now, 2);
+    droneCutoff = cutoff;
+    warble?.droneCutoff.gain.setTargetAtTime(cutoff * DRONE_WARBLE_SWING, now, 2);
   }
   let generation = 0;
   let mapping: { simulation: number; audio: number } | undefined;
@@ -420,6 +489,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       oscillator.stop();
     }
     for (const node of voice.nodes) node.disconnect();
+    voice.unplug?.();
     voices.delete(voice);
   }
   function cancel() {
@@ -577,6 +647,28 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       oscillators: cast.oscillators,
       nodes: [...cast.oscillators, ...cast.nodes, envelope, filter],
     };
+    if (role === "sun") {
+      // The sphere's ripple decays without the mass and closing the tone hears.
+      const wobble = decayFor(midi, velocity, undefined, 0, state.anchorMidi);
+      strikeWarble(start, velocity, wobble);
+      const swing = ensureWarble();
+      const other = cast.oscillators[1];
+      if (swing && other) {
+        const bend = context.createGain();
+        bend.gain.value = PAD_WARBLE_CENTS;
+        const sweep = context.createGain();
+        sweep.gain.value = open * lit * PAD_WARBLE_SWING;
+        swing.depth.connect(bend);
+        swing.depth.connect(sweep);
+        bend.connect(other.detune);
+        sweep.connect(filter.frequency);
+        voice.nodes.push(bend, sweep);
+        voice.unplug = () => {
+          swing.depth.disconnect(bend);
+          swing.depth.disconnect(sweep);
+        };
+      }
+    }
     voices.add(voice);
     const carrier = cast.oscillators[0];
     if (carrier) carrier.onended = () => release(voice);
