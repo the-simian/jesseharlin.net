@@ -43,5 +43,5 @@ export function OrreryCanvas({
     };
   }, [store, runtime, mixStore]);
 
-  return <canvas ref={canvasRef} className="orrery-canvas" aria-label="the orrery" />;
+  return <canvas ref={canvasRef} className="orrery-canvas" role="img" aria-label="the orrery" />;
 }
