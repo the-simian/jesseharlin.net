@@ -9,12 +9,22 @@ import { PRESETS } from "./model/presets";
 import { useOrrery } from "./use-orrery";
 import { OrreryCanvas } from "./view/orrery-canvas";
 
+/** The places the work lives. The first row is where it lives now; the second is the rest. */
 const LINKS = [
-  { label: "GitHub", href: "https://github.com/the-simian" },
-  { label: "SoundCloud", href: "https://soundcloud.com/harlinjesse" },
-  { label: "x4records", href: "https://x4records.bandcamp.com/" },
   { label: "simiancraft", href: "https://simiancraft.com/" },
+  { label: "SoundCloud", href: "https://soundcloud.com/harlinjesse" },
+  { label: "GitHub", href: "https://github.com/the-simian" },
   { label: "Talks", href: "https://slides.com/jesseharlin" },
+];
+const MORE_LINKS = [
+  { label: "LinkedIn", href: "https://www.linkedin.com/in/jesseharlin/" },
+  { label: "Instagram", href: "https://www.instagram.com/the_simian/" },
+  { label: "X", href: "https://x.com/5imian" },
+  { label: "CodePen", href: "https://codepen.io/JesseHarlin" },
+  { label: "ModDB", href: "https://www.moddb.com/members/the-simian" },
+  { label: "x4records", href: "https://x4records.bandcamp.com/" },
+  { label: "OKCjs", href: "http://okcjs.com/" },
+  { label: "Techlahoma", href: "https://www.techlahoma.org/our-board-and-staff/" },
 ];
 
 export function OrreryScreen() {
@@ -44,11 +54,24 @@ export function OrreryScreen() {
           </p>
         </>
       }
-      linksZone={LINKS.map((link) => (
-        <a key={link.href} href={link.href} className="link">
-          {link.label}
-        </a>
-      ))}
+      linksZone={
+        <>
+          <div className="links-row">
+            {LINKS.map((link) => (
+              <a key={link.href} href={link.href} className="link">
+                {link.label}
+              </a>
+            ))}
+          </div>
+          <div className="links-row links-more">
+            {MORE_LINKS.map((link) => (
+              <a key={link.href} href={link.href} className="link link-small">
+                {link.label}
+              </a>
+            ))}
+          </div>
+        </>
+      }
       primaryZone={
         <Flip
           view={orrery.state.activeView ?? "telescope"}
