@@ -47,7 +47,7 @@ export function OrreryScreen() {
           {link.label}
         </a>
       ))}
-      flipZone={
+      primaryZone={
         <Flip
           view={orrery.state.activeView ?? "telescope"}
           soundOn={orrery.state.soundEnabled}

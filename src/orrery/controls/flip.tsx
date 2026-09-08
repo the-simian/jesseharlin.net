@@ -7,7 +7,7 @@ type FlipProps = {
   onSound: () => void;
 };
 
-/** Above or below, and whether it makes a sound. */
+/** Sound first, then above or below: the two things a visitor must find. */
 export function Flip({ view, soundOn, onView, onSound }: FlipProps) {
   const note =
     view === "pool"
@@ -15,8 +15,13 @@ export function Flip({ view, soundOn, onView, onSound }: FlipProps) {
       : "Above is the sky as arranged. Below mirrors it, intervals inverted.";
   return (
     <div className="flip">
-      <p className="flip-note">{note}</p>
       <div className="flip-controls">
+        <button type="button" className="knob knob-sound" data-on={soundOn} onClick={onSound}>
+          <span className="knob-glyph" aria-hidden="true">
+            {soundOn ? "◉" : "○"}
+          </span>
+          <span className="knob-label">{soundOn ? "Mute sound" : "Enable sound"}</span>
+        </button>
         <fieldset className="segmented">
           <legend className="visually-hidden">view</legend>
           <button
@@ -36,13 +41,8 @@ export function Flip({ view, soundOn, onView, onSound }: FlipProps) {
             So below
           </button>
         </fieldset>
-        <button type="button" className="knob knob-sound" data-on={soundOn} onClick={onSound}>
-          <span className="knob-glyph" aria-hidden="true">
-            {soundOn ? "◉" : "○"}
-          </span>
-          <span className="knob-label">{soundOn ? "Mute sound" : "Enable sound"}</span>
-        </button>
       </div>
+      <p className="flip-note">{note}</p>
     </div>
   );
 }

@@ -9,6 +9,8 @@ type OrreryLayoutProps = {
   nameZone: ReactNode;
   /** Outbound links, top right. */
   linksZone: ReactNode;
+  /** Sound and the view, under the name: the first two things to touch. */
+  primaryZone: ReactNode;
   /** The ensembles to start from, above the console. */
   presetsZone: ReactNode;
   /** Which world each body sounds, above the flip. */
@@ -17,8 +19,6 @@ type OrreryLayoutProps = {
   mixerZone: ReactNode;
   /** The instrument's controls, bottom. */
   consoleZone: ReactNode;
-  /** Above or below, and sound. */
-  flipZone: ReactNode;
 };
 
 export function OrreryLayout({
@@ -26,11 +26,11 @@ export function OrreryLayout({
   skyZone,
   nameZone,
   linksZone,
+  primaryZone,
   presetsZone,
   soundsZone,
   mixerZone,
   consoleZone,
-  flipZone,
 }: OrreryLayoutProps) {
   return (
     <div className="orrery" data-view={view}>
@@ -40,15 +40,15 @@ export function OrreryLayout({
         {linksZone}
       </nav>
       <div className="orrery-veil" aria-hidden="true" />
-      <div className="orrery-flip">
-        <div className="orrery-sounds">{soundsZone}</div>
-        {flipZone}
-        <div className="orrery-mixer">{mixerZone}</div>
-      </div>
+      <div className="orrery-primary">{primaryZone}</div>
       <section className="orrery-console" aria-label="instrument controls">
         <div className="orrery-presets">{presetsZone}</div>
         {consoleZone}
       </section>
+      <aside className="orrery-panels" aria-label="sounds and mix">
+        <div className="orrery-sounds">{soundsZone}</div>
+        <div className="orrery-mixer">{mixerZone}</div>
+      </aside>
     </div>
   );
 }

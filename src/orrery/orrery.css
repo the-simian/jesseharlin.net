@@ -102,20 +102,20 @@
   outline-offset: 2px;
 }
 
-.orrery-flip {
+.orrery-primary {
   position: absolute;
-  right: clamp(1rem, 3vw, 2.5rem);
-  bottom: clamp(1rem, 3vw, 2.5rem);
-  max-width: 22rem;
+  top: calc(clamp(1rem, 3vw, 2.5rem) + 7.6rem);
+  left: clamp(1rem, 3vw, 2.5rem);
+  max-width: 28rem;
 }
 
-/* the flip: a short note, then the two controls, stacked at the right edge */
+/* sound and the view: the controls, then one short line */
 
 .flip {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 0.6rem;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .flip-note {
@@ -123,8 +123,27 @@
   font-size: 0.72rem;
   line-height: 1.45;
   opacity: 0.7;
-  max-width: 20rem;
-  text-align: right;
+  max-width: 24rem;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* the panels: sounds and the mix, folded at the right edge */
+
+.orrery-panels {
+  position: absolute;
+  right: clamp(1rem, 3vw, 2.5rem);
+  bottom: clamp(1rem, 3vw, 2.5rem);
+  width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* the sound knob is the call: filled until it is on */
+.knob-sound[data-on="false"] {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: var(--ink);
 }
 
 .flip-controls {
@@ -259,7 +278,6 @@
 /* the sounds: one row of circles per body */
 
 .orrery-sounds {
-  margin-bottom: 0.75rem;
   width: 100%;
 }
 
@@ -459,10 +477,9 @@
   border-color: var(--brass);
 }
 
-/* the mix: four sliders under the flip */
+/* the mix: four sliders under the sounds */
 
 .orrery-mixer {
-  margin-top: 0.75rem;
   width: 100%;
 }
 
@@ -726,11 +743,22 @@ fieldset.segmented {
     border-top: 1px solid var(--ui-line);
     margin-top: 0.5rem;
   }
-  .orrery-flip,
+  .orrery-primary,
+  .orrery-panels,
   .orrery-console {
     position: static;
     max-width: none;
+    width: auto;
     padding: 0.75rem 1rem 0;
+  }
+  .orrery-primary {
+    order: 1;
+  }
+  .orrery-console {
+    order: 2;
+  }
+  .orrery-panels {
+    order: 3;
   }
   .flip {
     align-items: stretch;
