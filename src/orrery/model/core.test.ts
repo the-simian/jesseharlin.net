@@ -8,15 +8,17 @@ import {
   setDrift,
   setOffset,
   setOrbitRadius,
+  setPatch,
   setPhase,
   setRatio,
   setSoundEnabled,
 } from "./commands";
 import { decayCurve } from "./decay";
+import { defaultPatchOf, patchOf, placeOf } from "./patches";
 import { midiToHz, pitchClass, snapToScale, soundingPitch } from "./pitch";
 import { createEmptyState } from "./presets";
 import { createSimulation, shadeAt, spreadAt } from "./simulation";
-import { depthOf, timbreOf } from "./tree";
+import { depthOf } from "./tree";
 import { type Body, type InstrumentState, LIMITS } from "./types";
 import { validateState } from "./validate";
 
@@ -536,18 +538,24 @@ test("spread runs from drawn in at periapsis to flung out at apoapsis and ignore
   assert(spreadAt(state, [{ id: sun.id, x: 0, y: 0 }]) === 0.5, "A lone sun sits at the middle.");
 });
 
-test("moons round one parent take deep space, chime, string, and voice in turn", () => {
+test("moons take their patches in turn, a body may be cast within its role, and places count", () => {
   let next = addBody(createEmptyState(), "sun");
   const planet = next.bodies.at(-1);
   assert(planet !== undefined);
-  for (let i = 0; i < 4; i++) next = addBody(next, planet.id);
+  for (let i = 0; i < 5; i++) next = addBody(next, planet.id);
   const moons = next.bodies.filter((body) => body.parentId === planet.id);
   assert(
-    moons.map((moon) => timbreOf(moon, next.bodies)).join() === "deep,chime,string,vox",
-    "Timbres cycle round the parent in the order the moons were added.",
+    moons.map((moon) => patchOf(moon, next.bodies)).join() === "deep,chime,string,vox,deep",
+    "Moons round one parent take deep space, chime, string, and voice in turn.",
   );
-  // A moon of a moon starts its own count.
-  const grandchild = addBody(next, moons[1]?.id ?? "").bodies.at(-1);
-  assert(grandchild !== undefined);
-  assert(timbreOf(grandchild, [...next.bodies, grandchild]) === "deep");
+  assert(patchOf(planet, next.bodies) === "harp" && defaultPatchOf(planet, next.bodies) === "harp");
+  assert(placeOf(planet, next.bodies) === "planet 1");
+  assert(placeOf(moons[2] as Body, next.bodies) === "moon 3");
+  const cast = setPatch(next, moons[0]?.id ?? "", "bell");
+  assert(
+    patchOf(cast.bodies.find((body) => body.id === moons[0]?.id) as Body, cast.bodies) === "bell",
+  );
+  // A patch outside the role is refused whole.
+  const refused = setPatch(next, planet.id, "vox");
+  assert(refused === next, "A planet cannot be cast to a moon's patch.");
 });

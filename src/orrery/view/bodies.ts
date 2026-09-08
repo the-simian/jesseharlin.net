@@ -18,8 +18,9 @@ import type { VolumetricLightScatteringPostProcess } from "@babylonjs/core/PostP
 import type { Scene } from "@babylonjs/core/scene";
 import type { MixStore } from "../mix";
 import { decayCurve } from "../model/decay";
+import { defaultPatchOf, PATCH_COLORS, patchOf } from "../model/patches";
 import { soundingPitch } from "../model/pitch";
-import { depthOf, type Timbre, timbreOf } from "../model/tree";
+import { depthOf } from "../model/tree";
 import type { Body, BodyId, BodyPosition, InstrumentState, ViewName } from "../model/types";
 import type { Dust } from "./dust";
 import type { Palette } from "./palette";
@@ -103,13 +104,6 @@ function bodyColor(palette: Palette, depth: number): Color3 {
   if (depth === 1) return palette.planet;
   return palette.moon;
 }
-
-/** The colour a moon leans toward for its timbre; deep space keeps the palette's own. */
-const TIMBRE_TINTS: Partial<Record<Timbre, Color3>> = {
-  chime: new Color3(0.85, 0.96, 1),
-  string: new Color3(1, 0.72, 0.38),
-  vox: new Color3(0.68, 0.58, 1),
-};
 
 function glowColor(palette: Palette, depth: number): Color3 {
   if (depth === 0) return palette.sunGlow;
@@ -346,13 +340,15 @@ export function createBodies(options: BodiesOptions) {
       Color3.Lerp(warmth, hueTurn, 0.35),
       visual.depth === 0 ? 0.15 : 0.6,
     );
-    // A moon's colour says what it is made of: deep space keeps the palette,
-    // chimes go icy, strings to amber, voices to lavender.
-    if (visual.depth >= 2) {
-      const body = state.bodies.find((candidate) => candidate.id === id);
-      const timbre = body ? timbreOf(body, state.bodies) : "deep";
-      const cast = TIMBRE_TINTS[timbre];
-      if (cast) light = Color3.Lerp(light, cast, 0.45);
+    // A body's colour says what it is cast to; a body on its role's default
+    // patch keeps the palette's own colour.
+    const body = state.bodies.find((candidate) => candidate.id === id);
+    if (body && visual.depth > 0) {
+      const sound = patchOf(body, state.bodies);
+      if (sound !== defaultPatchOf(body, state.bodies)) {
+        const [r, g, b] = PATCH_COLORS[sound];
+        light = Color3.Lerp(light, new Color3(r, g, b), 0.5);
+      }
     }
     visual.light = light;
     visual.register = register;

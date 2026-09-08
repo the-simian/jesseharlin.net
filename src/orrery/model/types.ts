@@ -23,8 +23,13 @@ export type Drift =
       periodSeconds: number;
     };
 
+/** The patches a body can be cast to; each role plays its own set. */
+export type PatchName = "pad" | "harp" | "pluck" | "deep" | "chime" | "string" | "vox" | "bell";
+
 export interface Body {
   id: BodyId;
+  /** The patch this body is cast to. Absent, the body takes its role's default in turn. */
+  patch?: PatchName;
   /** null for the sun. */
   parentId: BodyId | null;
   /** Radius of the finite disc used for contact detection, in orrery units. */

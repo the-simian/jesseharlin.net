@@ -3,6 +3,13 @@
 The instrument's voices are modelled on DX7 patches from patches.fm. Each
 patch has a JSON form at `https://patches.fm/patches/dx7/<first two hex>/<signature>.json`.
 
+## Names
+
+Each patch is named for a world so choosing a sound reads as choosing a body:
+pad is Betelgeuse; harp (SpaceHarps) is Dimidium and the plain string is
+Draugr; the moons are Charon (DeepSpace), Enceladus (Spacechime), Titania
+(string), Miranda (SpaceVox), and Hyperion (the old bell).
+
 ## In use
 
 - **SpaceVox** (`dcc0e48c1eb32be22cc8bb02db22ed66cfcda5c0`): the moons' voice

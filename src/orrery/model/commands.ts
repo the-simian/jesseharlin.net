@@ -1,5 +1,5 @@
 import { PRESETS } from "./presets";
-import type { Body, BodyId, Drift, InstrumentState, Ratio, ViewName } from "./types";
+import type { Body, BodyId, Drift, InstrumentState, PatchName, Ratio, ViewName } from "./types";
 import { validateState } from "./validate";
 
 function accept(previous: InstrumentState, next: InstrumentState): InstrumentState {
@@ -104,6 +104,8 @@ export function removeBody(state: InstrumentState, id: BodyId): InstrumentState 
     selectedBodyIds: state.selectedBodyIds.filter((selected) => !removed.has(selected)),
   });
 }
+export const setPatch = (state: InstrumentState, id: BodyId, patch: PatchName) =>
+  edit(state, id, { patch });
 export const setRatio = (state: InstrumentState, id: BodyId, speedRatio: Ratio) =>
   edit(state, id, { speedRatio: { ...speedRatio } });
 export const setOffset = (state: InstrumentState, id: BodyId, pitchOffsetSemitones: number) =>

@@ -9,6 +9,7 @@ import {
   setDrift,
   setOffset,
   setOrbitRadius,
+  setPatch,
   setRatio,
   setSoundEnabled,
 } from "./model/commands";
@@ -19,6 +20,7 @@ import {
   type Drift,
   type InstrumentState,
   LIMITS,
+  type PatchName,
   type Ratio,
   type ViewName,
 } from "./model/types";
@@ -93,6 +95,9 @@ export function useOrrery() {
     },
     setRing(orbitRadius: number) {
       if (selected) store.dispatch((s) => setOrbitRadius(s, selected.id, orbitRadius));
+    },
+    setPatch(id: string, patch: PatchName) {
+      store.dispatch((s) => setPatch(s, id, patch));
     },
     setDriftMode(drift: Drift) {
       if (selected) store.dispatch((s) => setDrift(s, selected.id, drift));

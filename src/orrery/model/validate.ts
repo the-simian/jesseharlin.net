@@ -1,4 +1,6 @@
+import { PATCHES_FOR_ROLE, roleOf } from "./patches";
 import { pitchClass } from "./pitch";
+import { depthOf } from "./tree";
 import { type InstrumentState, LIMITS } from "./types";
 
 export function validateState(
@@ -41,6 +43,15 @@ export function validateState(
     if (typeof body.strikesParent !== "boolean") fail("Invalid parent strike flag.");
     if (typeof body.exchangesPitch !== "boolean") fail("Invalid pitch exchange flag.");
     if (!body.id) fail("Id is required.");
+    if (body.patch !== undefined) {
+      let allowed = false;
+      try {
+        allowed = PATCHES_FOR_ROLE[roleOf(depthOf(body, byId))].includes(body.patch);
+      } catch {
+        allowed = false;
+      }
+      if (!allowed) fail("Patch is not one this body can play.");
+    }
     if (!Number.isFinite(body.discRadius) || body.discRadius <= 0)
       fail("Disc radius must be positive.");
     if (!Number.isFinite(body.orbitRadius) || body.orbitRadius < 0) fail("Invalid orbit radius.");

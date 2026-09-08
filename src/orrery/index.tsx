@@ -2,6 +2,7 @@ import { Console } from "./controls/console";
 import { Flip } from "./controls/flip";
 import { Mixer } from "./controls/mixer";
 import { Presets } from "./controls/presets";
+import { Sounds } from "./controls/sounds";
 import { OrreryLayout } from "./layout";
 import { sharedMix, useMix } from "./mix";
 import { PRESETS } from "./model/presets";
@@ -63,6 +64,13 @@ export function OrreryScreen() {
             const preset = PRESETS.find((candidate) => candidate.id === id);
             if (preset) sharedMix.setMix(preset.mix);
           }}
+        />
+      }
+      soundsZone={
+        <Sounds
+          bodies={orrery.state.bodies}
+          presetId={orrery.activePresetId}
+          onPatch={orrery.setPatch}
         />
       }
       mixerZone={<Mixer mix={mix} presetId={orrery.activePresetId} onLevel={sharedMix.setLevel} />}

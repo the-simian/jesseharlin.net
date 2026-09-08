@@ -226,12 +226,165 @@
   backdrop-filter: blur(6px);
 }
 
-.editor-title {
+.console-editor {
+  margin: 0;
+  padding: 0.5rem 0.9rem 0.6rem;
+  gap: 0.6rem;
+}
+
+.editor-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.4rem;
   font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.editor-legend small {
+  opacity: 0.6;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  opacity: 0.75;
-  margin-right: 0.5rem;
+  font-size: 0.6rem;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--ui-line);
+}
+
+/* the sounds: one row of circles per body */
+
+.orrery-sounds {
+  margin-bottom: 0.75rem;
+  width: 100%;
+}
+
+.sounds {
+  margin: 0;
+  padding: 0 0.9rem;
+  border: 1px solid var(--ui-line);
+  border-radius: 1.25rem;
+  background: var(--ui-bg);
+  backdrop-filter: blur(6px);
+  min-width: 17rem;
+}
+
+.sounds[open] {
+  padding-bottom: 0.6rem;
+}
+
+/* the sky keeps its room: long casts scroll inside the panel */
+.sounds-rows {
+  max-height: min(38vh, 22rem);
+  overflow-y: auto;
+  padding-right: 0.2rem;
+  scrollbar-width: thin;
+}
+
+.sounds-summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+}
+
+.sounds-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sounds-summary::after {
+  content: "+";
+  margin-left: auto;
+  font-size: 1rem;
+}
+
+.sounds[open] .sounds-summary::after {
+  content: "−";
+}
+
+.cast-row {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: 4rem 1fr 5.2rem;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.4rem;
+  font-size: 0.68rem;
+}
+
+.cast-row + .cast-row {
+  margin-top: 0.1rem;
+}
+
+.cast-place {
+  float: left;
+  padding: 0;
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.6rem;
+}
+
+.cast-circles {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.cast-circle {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.cast-circle input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.cast-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--swatch);
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.cast-circle input:checked + .cast-dot {
+  background: var(--swatch);
+}
+
+.cast-circle input:focus-visible + .cast-dot {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.cast-name {
+  opacity: 0.8;
+  text-align: right;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 /* knobs: the big physical buttons */
@@ -521,6 +674,18 @@ fieldset.segmented {
   outline-offset: 1px;
 }
 
+/* the editor's fields are smaller than the console's */
+.console-editor .field {
+  gap: 0.15rem;
+  font-size: 0.68rem;
+}
+
+.console-editor .field-input {
+  min-height: 2rem;
+  padding: 0.25rem 1.8rem 0.25rem 0.75rem;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 48rem) {
   /* On a phone the page flows: sky, then the flip, then the console. */
   .orrery {
@@ -570,7 +735,8 @@ fieldset.segmented {
   .flip {
     align-items: stretch;
   }
-  .mixer {
+  .mixer,
+  .sounds {
     min-width: 0;
   }
   .flip-note {

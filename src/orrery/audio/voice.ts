@@ -5,9 +5,10 @@
 import { sharedMix } from "../mix";
 import { createInitialState } from "../model/commands";
 import { decayCurve } from "../model/decay";
+import { patchOf, type Role, roleOf } from "../model/patches";
 import { midiToHz, soundingPitch } from "../model/pitch";
-import { depthOf, type Timbre, timbreOf } from "../model/tree";
-import type { Contact, InstrumentState, ViewName } from "../model/types";
+import { depthOf } from "../model/tree";
+import type { Contact, InstrumentState, PatchName, ViewName } from "../model/types";
 import { validateState } from "../model/validate";
 
 const LOOKAHEAD = 0.1;
@@ -82,13 +83,6 @@ interface Excitation {
  * rate, in radians per second, and its swell decays by e^(-3t / decay).
  */
 export const WOBBLE_RATE = 18;
-
-/** Where a body sits in the tree decides its section. */
-export type Role = "sun" | "planet" | "moon";
-
-export function roleOf(depth: number): Role {
-  return depth === 0 ? "sun" : depth === 1 ? "planet" : "moon";
-}
 
 /** What every patch is handed: the note, its time, and the shared envelope and filter. */
 interface Patch {
@@ -194,13 +188,54 @@ function pad(
 }
 
 /**
+ * A planet as a plain harp string: bright for an instant, then a plain
+ * ringing fundamental. The modulator an octave up flashes and is gone; the
+ * pick is a short burst at the fifth partial.
+ */
+function pluck(
+  { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
+  open: number,
+): Cast {
+  const carrier = context.createOscillator();
+  const modulator = context.createOscillator();
+  const pick = context.createOscillator();
+  const modulation = context.createGain();
+  const pickGain = context.createGain();
+  carrier.frequency.value = frequency;
+  modulator.frequency.value = Math.min(frequency * 2, nyquist);
+  modulation.gain.setValueAtTime(frequency * (0.4 + 1.4 * velocity), start);
+  modulation.gain.exponentialRampToValueAtTime(frequency * 0.02, start + 0.06);
+  modulation.gain.exponentialRampToValueAtTime(0.001, start + Math.min(duration, 0.6));
+  modulator.connect(modulation);
+  modulation.connect(carrier.frequency);
+  pick.frequency.value = Math.min(frequency * 5, nyquist);
+  pickGain.gain.setValueAtTime(0, start);
+  pickGain.gain.linearRampToValueAtTime(0.3 * velocity, start + 0.002);
+  pickGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.02);
+  pick.connect(pickGain);
+  pickGain.connect(filter);
+  carrier.connect(envelope);
+  const peak = 0.9 * velocity;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(peak, start + 0.0015);
+  envelope.gain.exponentialRampToValueAtTime(peak * 0.35, start + Math.min(duration * 0.5, 0.3));
+  filter.frequency.setValueAtTime(Math.min(nyquist, open * 1.3), start);
+  filter.frequency.exponentialRampToValueAtTime(
+    Math.max(200, frequency * 2.5),
+    start + Math.min(duration * 0.5, 0.45),
+  );
+  filter.Q.value = 0.7;
+  return { oscillators: [carrier, modulator, pick], nodes: [modulation, pickGain] };
+}
+
+/**
  * A planet as a harp, after Tim Conrardy's DX7 SpaceHarps: one carrier on the
  * fundamental with three modulators on it. A ratio-2 modulator strikes and
  * decays, the pluck; a ratio-3 modulator six cents flat swells in over the
  * first half second and holds, so the note blooms after it is struck; the
  * patch's ratio-4 feedback branch and its high blip are folded into the pick.
  */
-function pluck(
+function harp(
   { context, frequency, velocity, start, duration, nyquist, envelope, filter }: Patch,
   open: number,
 ): Cast {
@@ -898,11 +933,10 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     }
   }
   /**
-   * A body's patch follows its place in the tree, the way an ensemble is cast
-   * by section: the sun is a pad (bowed, slow to bloom, held), planets are
-   * harps (struck, then blooming), and moons take their timbre in turn round their parent:
-   * deep space, chimes, plucked strings, and voices, with the old bell (the
-   * metallophone) kept for the asking. Every patch is three oscillators feeding
+   * A body sounds the patch it is cast to (see model/patches): the sun a pad,
+   * planets a blooming harp or a plain string, moons deep space, a chime, a
+   * plucked string, a voice, or the old bell. Its place in the tree decides
+   * which section bus it sums on. Every patch is three oscillators feeding
    * one envelope and one lowpass, so the voice budget is the same whatever is cast.
    */
   function excite(
@@ -914,7 +948,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
     shade: number,
     weight = 0.5,
     role: Role = "moon",
-    timbre: Timbre = "deep",
+    sound: PatchName = "deep",
   ) {
     if (!context || !bus) return;
     // The struck sun breathes longer than its mass alone would give it.
@@ -939,20 +973,18 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
       filter,
     };
     // The tilt: drawn in, the sun opens; flung out, the moons do.
-    const cast =
-      role === "sun"
-        ? pad(patch, open * lit * (0.5 + 1.0 * (1 - spread)))
-        : role === "planet"
-          ? pluck(patch, open * lit)
-          : timbre === "string"
-            ? string(patch, open * lit * (0.55 + 0.9 * spread))
-            : timbre === "vox"
-              ? vox(patch, open * lit * (0.55 + 0.9 * spread))
-              : timbre === "chime"
-                ? chime(patch, open * lit * (0.55 + 0.9 * spread), midi)
-                : timbre === "deep"
-                  ? deep(patch, open * lit * (0.55 + 0.9 * spread))
-                  : bell(patch, open * lit * (0.55 + 0.9 * spread), weight, midi);
+    const moonOpen = open * lit * (0.55 + 0.9 * spread);
+    const casts: Record<PatchName, () => Cast> = {
+      pad: () => pad(patch, open * lit * (0.5 + 1.0 * (1 - spread))),
+      harp: () => harp(patch, open * lit),
+      pluck: () => pluck(patch, open * lit),
+      deep: () => deep(patch, moonOpen),
+      chime: () => chime(patch, moonOpen, midi),
+      string: () => string(patch, moonOpen),
+      vox: () => vox(patch, moonOpen),
+      bell: () => bell(patch, moonOpen, weight, midi),
+    };
+    const cast = casts[sound]();
     envelope.gain.exponentialRampToValueAtTime(0.00001, start + duration - 0.025);
     envelope.gain.linearRampToValueAtTime(0, start + duration);
     // Every tone darkens as it rings, the way a pedaled string loses its top first.
@@ -1099,7 +1131,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
         }
         const body = byId.get(id);
         const role = body ? roleOf(depthOf(body, byId)) : "moon";
-        const timbre = body ? timbreOf(body, state.bodies) : "deep";
+        const sound = body ? patchOf(body, state.bodies) : "deep";
         excite(
           note.midi,
           note.velocity,
@@ -1109,7 +1141,7 @@ export function createVoiceEngine(options: VoiceEngineOptions = {}) {
           note.shade,
           note.weight,
           role,
-          timbre,
+          sound,
         );
       }
     }

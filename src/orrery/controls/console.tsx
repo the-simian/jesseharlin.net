@@ -1,6 +1,8 @@
 import { innermostRing } from "../model/commands";
+import { PATCH_NAMES, patchOf, placeOf } from "../model/patches";
 import type { Body, Drift, Ratio } from "../model/types";
 import { LIMITS } from "../model/types";
+import { swatchColor } from "./sounds";
 
 /** Three rings per parent: near, middle, far. Bodies on one ring meet; bodies on different rings do not. */
 export function ringsFor(parent: Body, child: Body): number[] {
@@ -53,13 +55,7 @@ type ConsoleProps = {
 };
 
 function bodyName(body: Body, bodies: Body[]): string {
-  if (body.parentId === null) return "the sun";
-  const parent = bodies.find((candidate) => candidate.id === body.parentId);
-  const siblings = bodies.filter((candidate) => candidate.parentId === body.parentId);
-  const index = siblings.findIndex((candidate) => candidate.id === body.id) + 1;
-  return parent?.parentId === null
-    ? `planet ${index}`
-    : `moon ${index} of ${bodyName(parent as Body, bodies)}`;
+  return body.parentId === null ? "the sun" : placeOf(body, bodies);
 }
 
 /** The instrument's controls. Big targets; nothing hidden behind a gesture. */
@@ -106,7 +102,6 @@ export function Console(props: ConsoleProps) {
         </button>
         <label className="field field-inline">
           <span className="field-label">
-            Body{" "}
             <small>
               {props.bodyCount} of {LIMITS.maxBodies}
             </small>
@@ -223,16 +218,18 @@ function BodyEditor({
       </span>
     </label>
   );
+  const sound = patchOf(body, bodies);
   return (
-    <div className="console-row console-editor">
-      <span className="editor-title">{isSun ? "The sun" : "Selected body"}</span>
+    <fieldset className="console-row console-editor">
+      <legend className="editor-legend">
+        <span className="swatch" style={{ background: swatchColor(sound) }} aria-hidden="true" />
+        {PATCH_NAMES[sound]}
+        <small>{bodyName(body, bodies)}</small>
+      </legend>
       {ring}
       {speed}
       <label className="field">
-        <span className="field-label">
-          {isSun ? "Pitch of everything" : "Pitch"}
-          <small>{isSun ? " mirrored below" : " vs its parent, mirrored below"}</small>
-        </span>
+        <span className="field-label">{isSun ? "Pitch of all" : "Pitch"}</span>
         <span className="field-select">
           <select
             className="field-input"
@@ -248,7 +245,7 @@ function BodyEditor({
         </span>
       </label>
       {drift}
-    </div>
+    </fieldset>
   );
 }
 
